@@ -2,13 +2,15 @@
   import { t, codeLabel, intlLocale, date, number } from '../../lib/i18n/i18n.svelte';
 
   import { onMount } from 'svelte';
+  import UpdateSettings from '../updates/UpdateSettings.svelte';
+  import type { AppUpdater } from '../../lib/services/updater.svelte';
   import type { Workspace } from '../../lib/services/workspace.svelte';
   import type { BackupInfo, StorageInfo } from '../../lib/domain/types';
   import Icon from '../../lib/ui/Icon.svelte';
   import TextField from '../../lib/ui/TextField.svelte';
   import ImportProject from './ImportProject.svelte';
   import { createSample } from '../../lib/services/sample';
-  let { workspace }: { workspace: Workspace } = $props();
+  let { workspace, updater }: { workspace: Workspace; updater: AppUpdater } = $props();
   let backups = $state<BackupInfo[]>([]),
     storage = $state<StorageInfo | null>(null),
     busy = $state(false),
@@ -132,6 +134,7 @@
       <p>{t('Your workspace, your preferences, your recovery options.')}</p>
     </div>
   </div>
+  {#if workspace.repo.mode === 'desktop'}<UpdateSettings {updater} />{/if}
   <div class="settings-section">
     <div>
       <h2>{t('Appearance')}</h2>

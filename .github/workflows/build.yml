@@ -3,6 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ['v*']
 permissions:
   contents: read
 concurrency:
@@ -50,7 +51,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: tracefold-0.1.0-${{ matrix.artifact }}
+          name: tracefold-${{ matrix.artifact }}
           if-no-files-found: error
           retention-days: 14
           path: |
@@ -59,3 +60,32 @@ jobs:
             src-tauri/target/release/bundle/dmg/*.dmg
             src-tauri/target/release/bundle/deb/*.deb
             src-tauri/target/release/bundle/appimage/*
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: stable
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          path: release-artifacts
+      - name: Verify signatures and prepare the in-app update feed
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/prepare-release.mjs release-artifacts release-output "$RELEASE_TAG"
+      - name: Publish installers and update feed together
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test -f "docs/releases/$RELEASE_TAG.md"
+          gh release create "$RELEASE_TAG" --verify-tag --draft --title "Tracefold $RELEASE_TAG" --notes-file "docs/releases/$RELEASE_TAG.md" release-output/*
+          gh release edit "$RELEASE_TAG" --draft=false --latest

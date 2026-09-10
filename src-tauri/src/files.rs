@@ -170,6 +170,17 @@ pub fn read_verified(path: &Path, hash: &str, size: u64) -> Result<Vec<u8>> {
     }
     Ok(bytes)
 }
+pub fn sync_file(path: &Path) -> Result<()> {
+    check_path(path, false)?;
+    // Windows FlushFileBuffers requires a writable handle. Opening without
+    // create/truncate preserves the SQLite snapshot while flushing it.
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)?
+        .sync_all()?;
+    Ok(())
+}
 pub fn sync_dir(path: &Path) -> Result<()> {
     #[cfg(unix)]
     {

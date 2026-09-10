@@ -37,6 +37,29 @@ const snapshot = (records: AnyEntity[], ids?: string[]) =>
     },
   });
 describe('sanitized report graph', () => {
+  it('localizes compound field headings without changing user-authored findings', async () => {
+    const finding = createEntity('test', 'finding', 'Original English title', {
+      ...defaultData('finding'),
+      suspectedCause: 'The edit form reads an incomplete address model.',
+      confirmedCause: 'Original technical explanation',
+    });
+    const result = await assembleReportSnapshot({
+      project,
+      records: [finding],
+      options: { ...options, language: 'hu', preset: 'finding' },
+      generatedAt: at,
+      readAsset: async () => {
+        throw new Error('Unexpected asset access');
+      },
+    });
+    const text = reportText(buildReportModel(result));
+    expect(text).toContain('Feltételezett ok');
+    expect(text).toContain('Igazolt ok');
+    expect(text).toContain('Darabszám');
+    expect(text).not.toContain('Suspected Cause');
+    expect(text).toContain(finding.data.suspectedCause);
+    expect(text).toContain(finding.title);
+  });
   it('includes public chronology when a session is selected and excludes private entries', async () => {
     const session = createEntity('test', 'session', 'Session', defaultData('session'));
     const entry = createEntity('test', 'entry', 'Public', {

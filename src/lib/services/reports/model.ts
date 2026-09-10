@@ -31,7 +31,7 @@ const table = (headers: string[], rows: string[][]): RichNode => ({
 });
 const label = (key: string) =>
   key
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([a-z])([A-Z])/g, (_, a: string, b: string) => `${a} ${b.toLowerCase()}`)
     .replaceAll('_', ' ')
     .replace(/^./, (s) => s.toUpperCase());
 

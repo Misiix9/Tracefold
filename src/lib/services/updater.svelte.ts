@@ -18,7 +18,9 @@ export class AppUpdater {
   received = $state(0);
   total = $state<number | undefined>();
   error = $state('');
-  checking = false;
+  checking = $state(false);
+  checkStatus = $state<'never' | 'current' | 'available' | 'unavailable'>('never');
+  checkError = $state('');
   private disposed = false;
   private installed = false;
   constructor(private provider: UpdateProvider) {}
@@ -28,6 +30,7 @@ export class AppUpdater {
   async check() {
     if (this.checking || this.busy || this.disposed || this.installed) return;
     this.checking = true;
+    this.checkError = '';
     try {
       const update = await this.provider.check();
       if (this.disposed || this.busy || this.installed) {
@@ -36,8 +39,11 @@ export class AppUpdater {
       }
       const old = this.available;
       this.available = update;
+      this.checkStatus = update ? 'available' : 'current';
       await old?.close();
-    } catch {
+    } catch (error) {
+      this.checkStatus = 'unavailable';
+      this.checkError = String(error).slice(0, 600);
       /* Offline and unavailable feeds must never block local work. */
     } finally {
       this.checking = false;

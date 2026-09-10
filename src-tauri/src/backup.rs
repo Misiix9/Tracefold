@@ -123,7 +123,10 @@ enum BackupOrigin {
 /// Keep the union of ten recent intervals, seven daily points and four ISO weeks.
 /// Manual and legacy snapshots are outside automatic retention and never expire.
 fn retained_automatic(manifests: &[Manifest]) -> HashSet<String> {
-    let mut ordered: Vec<_> = manifests.iter().filter(|m| m.origin == BackupOrigin::Automatic).collect();
+    let mut ordered: Vec<_> = manifests
+        .iter()
+        .filter(|m| m.origin == BackupOrigin::Automatic)
+        .collect();
     ordered.sort_by(|a, b| b.info.created_at.cmp(&a.info.created_at));
     let mut keep = HashSet::new();
     let mut days = HashSet::new();
@@ -138,7 +141,9 @@ fn retained_automatic(manifests: &[Manifest]) -> HashSet<String> {
         let week = at.format("%G-%V").to_string();
         let daily = days.len() < 7 && days.insert(day);
         let weekly = weeks.len() < 4 && weeks.insert(week);
-        if index < 10 || daily || weekly { keep.insert(manifest.info.id.clone()); }
+        if index < 10 || daily || weekly {
+            keep.insert(manifest.info.id.clone());
+        }
     }
     keep
 }
@@ -263,7 +268,11 @@ impl Workspace {
     pub fn create_backup(&self, project_id: &str) -> Result<BackupInfo> {
         self.create_backup_with_origin(project_id, BackupOrigin::Manual)
     }
-    fn create_backup_with_origin(&self, project_id: &str, origin: BackupOrigin) -> Result<BackupInfo> {
+    fn create_backup_with_origin(
+        &self,
+        project_id: &str,
+        origin: BackupOrigin,
+    ) -> Result<BackupInfo> {
         let source = self.project_db(project_id)?;
         let project = Self::owned_project(&source, project_id)?;
         let root = child_dir(&self.root, "backups", false)?;
@@ -308,7 +317,7 @@ impl Workspace {
             }
         }
         drop(copy);
-        File::open(&path)?.sync_all()?;
+        sync_file(&path)?;
         let database_hash = hash_bytes(&read_bounded(&path, MAX_DATABASE_BYTES)?);
         let info = BackupInfo {
             id: new_id(),
@@ -340,11 +349,21 @@ impl Workspace {
         for entry in fs::read_dir(&root)? {
             let id = entry?.file_name().to_string_lossy().into_owned();
             // Unknown, damaged and legacy files are not deletion candidates.
-            if validate_id(&id).is_err() { continue; }
+            if validate_id(&id).is_err() {
+                continue;
+            }
             if let Ok((dir, m)) = self.backup_manifest(&id, project_id) {
                 let database = dir.join("workspace.sqlite");
                 if let Ok(meta) = fs::metadata(&database) {
-                    if meta.len() <= MAX_DATABASE_BYTES && copy_file(&database, &mut std::io::sink(), meta.len(), &m.database_hash).is_ok() {
+                    if meta.len() <= MAX_DATABASE_BYTES
+                        && copy_file(
+                            &database,
+                            &mut std::io::sink(),
+                            meta.len(),
+                            &m.database_hash,
+                        )
+                        .is_ok()
+                    {
                         manifests.push(m);
                     }
                 }
@@ -356,12 +375,22 @@ impl Workspace {
                 let dir = child_dir(&root, &manifest.info.id, false)?;
                 // Snapshot directories contain just these two files. Never recursively remove
                 // unknown content or any shared blob; history and manual backups may need it.
-                let names = fs::read_dir(&dir)?.map(|e| e.map(|e| e.file_name())).collect::<std::io::Result<Vec<_>>>()?;
-                if names.len() != 2 || !names.iter().all(|n| n == "manifest.json" || n == "workspace.sqlite") { continue; }
+                let names = fs::read_dir(&dir)?
+                    .map(|e| e.map(|e| e.file_name()))
+                    .collect::<std::io::Result<Vec<_>>>()?;
+                if names.len() != 2
+                    || !names
+                        .iter()
+                        .all(|n| n == "manifest.json" || n == "workspace.sqlite")
+                {
+                    continue;
+                }
                 check_path(&dir.join("manifest.json"), false)?;
                 check_path(&dir.join("workspace.sqlite"), false)?;
                 let retired = root.join(format!(".retired-{}", manifest.info.id));
-                if fs::symlink_metadata(&retired).is_ok() { continue; }
+                if fs::symlink_metadata(&retired).is_ok() {
+                    continue;
+                }
                 fs::rename(&dir, &retired)?;
                 sync_dir(&root)?;
                 fs::remove_file(retired.join("workspace.sqlite"))?;
@@ -472,7 +501,15 @@ impl Workspace {
         schema::integrity(&conn)?;
         let mut project = Self::owned_project(&conn, project_id)?;
         project.id = new_id();
-        project.name = format!("{} — {}", project.name, if self.get_settings()?.language == "hu" { "visszaállítva" } else { "restored" });
+        project.name = format!(
+            "{} — {}",
+            project.name,
+            if self.get_settings()?.language == "hu" {
+                "visszaállítva"
+            } else {
+                "restored"
+            }
+        );
         project.updated_at = now();
         project.revision += 1;
         let tx = conn.transaction()?;
@@ -518,7 +555,7 @@ impl Workspace {
         }
         conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;")?;
         drop(conn);
-        File::open(path)?.sync_all()?;
+        sync_file(&path)?;
         publish_dir(stage, &self.projects_dir()?.join(&project.id))?;
         Ok(project)
     }
@@ -528,41 +565,97 @@ impl Workspace {
 mod tests {
     use super::*;
     fn manifest(id: &str, at: &str, origin: BackupOrigin) -> Manifest {
-        Manifest { version: 1, info: BackupInfo { id: id.into(), project_id: "project".into(), name: "Fixture".into(), created_at: at.into(), size: 1, valid: true }, database_hash: "0".repeat(64), assets: vec![], origin }
+        Manifest {
+            version: 1,
+            info: BackupInfo {
+                id: id.into(),
+                project_id: "project".into(),
+                name: "Fixture".into(),
+                created_at: at.into(),
+                size: 1,
+                valid: true,
+            },
+            database_hash: "0".repeat(64),
+            assets: vec![],
+            origin,
+        }
     }
     #[test]
     fn retention_keeps_interval_daily_and_weekly_recovery_points() {
         let mut snapshots = Vec::new();
         for day in 1..=35 {
             for hour in 0..12 {
-                let at = chrono::DateTime::parse_from_rfc3339("2026-08-01T00:00:00Z").unwrap() + chrono::Duration::days(day) + chrono::Duration::hours(hour);
-                snapshots.push(manifest(&format!("d{day}-h{hour}"), &at.to_rfc3339(), BackupOrigin::Automatic));
+                let at = chrono::DateTime::parse_from_rfc3339("2026-08-01T00:00:00Z").unwrap()
+                    + chrono::Duration::days(day)
+                    + chrono::Duration::hours(hour);
+                snapshots.push(manifest(
+                    &format!("d{day}-h{hour}"),
+                    &at.to_rfc3339(),
+                    BackupOrigin::Automatic,
+                ));
             }
         }
-        snapshots.push(manifest("manual", "2026-10-01T00:00:00Z", BackupOrigin::Manual));
+        snapshots.push(manifest(
+            "manual",
+            "2026-10-01T00:00:00Z",
+            BackupOrigin::Manual,
+        ));
         let retained = retained_automatic(&snapshots);
-        for hour in 2..12 { assert!(retained.contains(&format!("d35-h{hour}"))); }
-        for day in 29..=35 { assert!(retained.contains(&format!("d{day}-h11"))); }
-        for day in [29,22,15] { assert!(retained.contains(&format!("d{day}-h11"))); }
+        for hour in 2..12 {
+            assert!(retained.contains(&format!("d35-h{hour}")));
+        }
+        for day in 29..=35 {
+            assert!(retained.contains(&format!("d{day}-h11")));
+        }
+        for day in [29, 22, 15] {
+            assert!(retained.contains(&format!("d{day}-h11")));
+        }
         assert!(!retained.contains("d35-h0"));
         assert!(!retained.contains("d1-h11"));
         assert!(!retained.contains("manual"));
-        let legacy = serde_json::to_value(manifest("legacy", "2026-01-01T00:00:00Z", BackupOrigin::Manual)).unwrap();
-        let mut legacy = legacy.as_object().unwrap().clone(); legacy.remove("origin");
-        assert!(serde_json::from_value::<Manifest>(legacy.into()).unwrap().origin == BackupOrigin::Manual);
+        let legacy = serde_json::to_value(manifest(
+            "legacy",
+            "2026-01-01T00:00:00Z",
+            BackupOrigin::Manual,
+        ))
+        .unwrap();
+        let mut legacy = legacy.as_object().unwrap().clone();
+        legacy.remove("origin");
+        assert!(
+            serde_json::from_value::<Manifest>(legacy.into())
+                .unwrap()
+                .origin
+                == BackupOrigin::Manual
+        );
     }
     #[test]
     fn portable_header_rejects_duplicate_assets_and_unbounded_or_unsafe_metadata() {
         let bytes = b"fixture";
         let hash = hash_bytes(bytes);
-        let asset = Asset { id: hash.clone(), hash, size: bytes.len() as u64, filename: "a.txt".into(), mime_type: "text/plain".into(), width: None, height: None };
+        let asset = Asset {
+            id: hash.clone(),
+            hash,
+            size: bytes.len() as u64,
+            filename: "a.txt".into(),
+            mime_type: "text/plain".into(),
+            width: None,
+            height: None,
+        };
         let mut m = manifest("backup", "2026-01-01T00:00:00Z", BackupOrigin::Manual);
-        m.assets.push(asset.clone()); m.info.size = 1 + asset.size;
-        let mut header = PortableHeader { kind: "tracefold-backup".into(), version: 1, database_size: 1, manifest: m };
+        m.assets.push(asset.clone());
+        m.info.size = 1 + asset.size;
+        let mut header = PortableHeader {
+            kind: "tracefold-backup".into(),
+            version: 1,
+            database_size: 1,
+            manifest: m,
+        };
         assert!(header.validate().is_ok());
-        header.manifest.assets.push(asset); header.manifest.info.size += bytes.len() as u64;
+        header.manifest.assets.push(asset);
+        header.manifest.info.size += bytes.len() as u64;
         assert!(header.validate().is_err());
-        header.manifest.assets.pop(); header.manifest.info.size -= bytes.len() as u64;
+        header.manifest.assets.pop();
+        header.manifest.info.size -= bytes.len() as u64;
         header.manifest.assets[0].filename = "../escape".into();
         assert!(header.validate().is_err());
         header.manifest.assets[0].filename = "a.txt".into();

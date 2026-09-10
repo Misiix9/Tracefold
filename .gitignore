@@ -2,6 +2,7 @@ node_modules/
 dist/
 src-tauri/target/
 scripts/capture-check/target/
+scripts/release-check/target/
 src-tauri/gen/
 work/
 .DS_Store

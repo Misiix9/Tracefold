@@ -332,8 +332,8 @@ mod platform {
     use super::*;
     use ashpd::{
         desktop::{
-            ResponseError,
             screenshot::{AvailableTargets, ScreenshotOptions, ScreenshotProxy},
+            ResponseError,
         },
         zbus, Error, PortalError,
     };
@@ -513,7 +513,10 @@ mod platform {
     }
 }
 
-#[cfg(all(test, any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+#[cfg(all(
+    test,
+    any(target_os = "macos", target_os = "linux", target_os = "windows")
+))]
 mod tests {
     use super::*;
     fn png_bytes(width: u32, height: u32) -> Vec<u8> {

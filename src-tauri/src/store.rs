@@ -144,7 +144,7 @@ impl Workspace {
             tx.commit()?;
             conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;")?;
             drop(conn);
-            File::open(stage.path().join("workspace.sqlite"))?.sync_all()?;
+            sync_file(&stage.path().join("workspace.sqlite"))?;
             publish_dir(stage, &destination)?;
             return Ok(project);
         }

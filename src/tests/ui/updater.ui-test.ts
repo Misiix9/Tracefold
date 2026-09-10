@@ -1,0 +1,48 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { flushSync, mount, unmount } from 'svelte';
+import UpdateButton from '../../features/updates/UpdateButton.svelte';
+import { AppUpdater } from '../../lib/services/updater.svelte';
+import { setLanguage } from '../../lib/i18n/i18n.svelte';
+
+let component: ReturnType<typeof mount> | undefined;
+afterEach(async () => {
+  if (component) await unmount(component);
+  component = undefined;
+  document.body.replaceChildren();
+  setLanguage('hu');
+});
+
+describe('update availability UI', () => {
+  it('shows the update action only for an available release and changes UI language', async () => {
+    const update = { version: '0.2.0', download: vi.fn(), install: vi.fn(), close: vi.fn() };
+    const updater = new AppUpdater({
+      check: async () => update,
+      prepare: vi.fn(),
+      relaunch: vi.fn(),
+    });
+    component = mount(UpdateButton, { target: document.body, props: { updater } });
+    flushSync();
+    expect(document.querySelector('button')).toBeNull();
+    await updater.check();
+    flushSync();
+    expect(document.querySelector('button')?.textContent).toContain(
+      'Frissítés a legújabb verzióra',
+    );
+    flushSync(() => setLanguage('en'));
+    expect(document.querySelector('button')?.textContent).toContain('Update to newest version');
+    expect(document.querySelector('button')?.title).toBe('Version 0.2.0');
+    expect(document.querySelector('a')).toBeNull();
+  });
+  it('announces progress and retains the recovery message in the active locale', () => {
+    const updater = new AppUpdater({ check: vi.fn(), prepare: vi.fn(), relaunch: vi.fn() });
+    updater.phase = 'downloading';
+    updater.total = 100;
+    updater.received = 25;
+    component = mount(UpdateButton, { target: document.body, props: { updater, overlay: true } });
+    flushSync();
+    expect(document.querySelector('[role="status"]')?.textContent).toContain('Frissítés letöltése');
+    expect(document.querySelector('progress')?.value).toBe(25);
+    expect(document.querySelector('progress')?.max).toBe(100);
+    expect(document.body.textContent).toContain('Projektjeid, bizonyítékaid és beállításaid');
+  });
+});

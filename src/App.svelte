@@ -323,7 +323,7 @@
         {:else if workspace.view === 'evidence'}<EvidenceView {workspace} />
         {:else if workspace.view === 'templates'}<TemplatesView {workspace} />
         {:else if workspace.view === 'reports'}<ReportsView {workspace} />
-        {:else}<SettingsView {workspace} />{/if}
+        {:else}<SettingsView {workspace} {updater} />{/if}
       {/key}
     </main>
   </div>

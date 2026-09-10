@@ -7,7 +7,7 @@ use crate::{
 };
 use rusqlite::params;
 use serde::Deserialize;
-use std::{collections::BTreeMap, fs::File};
+use std::collections::BTreeMap;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ImportedAsset {
@@ -138,7 +138,7 @@ impl Workspace {
         schema::integrity(&conn)?;
         conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;")?;
         drop(conn);
-        File::open(&path)?.sync_all()?;
+        sync_file(&path)?;
         publish_dir(stage, &destination)?;
         Ok(input.project)
     }

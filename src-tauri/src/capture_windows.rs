@@ -248,8 +248,16 @@ mod native {
                     hwnd: HWND::default(),
                     instance,
                 };
-                let title = HSTRING::from(if hungarian { "Tracefold – Képernyőkép kiválasztása" } else { "Tracefold – Choose a screenshot" });
-                let instruction = HSTRING::from(if hungarian { "Válassz ablakot vagy kijelzőt a Windows választóablakában.\nA Mégse gomb vagy az Escape mentés nélkül visszalép." } else { "Choose a window or display in the Windows picker.\nCancel or Escape returns without saving." });
+                let title = HSTRING::from(if hungarian {
+                    "Tracefold – Képernyőkép kiválasztása"
+                } else {
+                    "Tracefold – Choose a screenshot"
+                });
+                let instruction = HSTRING::from(if hungarian {
+                    "Válassz ablakot vagy kijelzőt a Windows választóablakában.\nA Mégse gomb vagy az Escape mentés nélkül visszalép."
+                } else {
+                    "Choose a window or display in the Windows picker.\nCancel or Escape returns without saving."
+                });
                 owner.hwnd = CreateWindowExW(
                     WINDOW_EX_STYLE::default(),
                     class.lpszClassName,
@@ -265,9 +273,21 @@ mod native {
                     None,
                 )
                 .map_err(api_error)?;
-                CreateWindowExW(WINDOW_EX_STYLE::default(), w!("STATIC"),
+                CreateWindowExW(
+                    WINDOW_EX_STYLE::default(),
+                    w!("STATIC"),
                     &instruction,
-                    WS_CHILD | WS_VISIBLE, 16, 16, 400, 60, Some(owner.hwnd), None, Some(instance), None).map_err(api_error)?;
+                    WS_CHILD | WS_VISIBLE,
+                    16,
+                    16,
+                    400,
+                    60,
+                    Some(owner.hwnd),
+                    None,
+                    Some(instance),
+                    None,
+                )
+                .map_err(api_error)?;
                 // Exclude our helper from capture where supported; this does not
                 // change selection or protection on any other window.
                 let _ = SetWindowDisplayAffinity(owner.hwnd, WDA_EXCLUDEFROMCAPTURE);

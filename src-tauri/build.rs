@@ -1,0 +1,29 @@
+fn main() {
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
+        tauri_build::AppManifest::new().commands(&[
+            "list_projects",
+            "save_project",
+            "list_records",
+            "get_record",
+            "save_record",
+            "delete_record",
+            "restore_record",
+            "get_revisions",
+            "get_settings",
+            "save_settings",
+            "import_asset",
+            "read_asset",
+            "capture_capabilities",
+            "capture_screen",
+            "save_file",
+            "create_backup",
+            "list_backups",
+            "restore_backup",
+            "export_backup_file",
+            "restore_backup_file",
+            "storage_info",
+            "import_project",
+        ]),
+    ))
+    .expect("Tracefold Tauri configuration must be valid");
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "workspace",
+  "description": "Only the local main webview may call the scoped native repository.",
+  "local": true,
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "workspace-repository",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-destroy",
+    "updater:allow-check",
+    "updater:allow-download",
+    "updater:allow-install",
+    "core:resources:allow-close",
+    "process:allow-restart"
+  ]
+}

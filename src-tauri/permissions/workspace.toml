@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "workspace-repository"
+description = "Project-scoped offline repository. File export requires a Rust-owned native save dialog; no arbitrary filesystem, SQL, shell, or network access."
+commands.allow = ["list_projects", "save_project", "list_records", "get_record", "save_record", "delete_record", "restore_record", "get_revisions", "get_settings", "save_settings", "import_asset", "read_asset", "capture_capabilities", "capture_screen", "save_file", "create_backup", "list_backups", "restore_backup", "export_backup_file", "restore_backup_file", "storage_info", "import_project"]

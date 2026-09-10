@@ -21,9 +21,7 @@
       }
     ],
     "security": {
-      "capabilities": [
-        "workspace"
-      ],
+      "capabilities": ["workspace"],
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'",
       "devCsp": "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:1420 ws://127.0.0.1:1420; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'"
     }
@@ -31,7 +29,13 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": [],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "category": "DeveloperTool",
     "shortDescription": "Offline testing and investigation workspace",
     "macOS": {
@@ -40,10 +44,7 @@
     "createUpdaterArtifacts": true,
     "windows": {
       "nsis": {
-        "languages": [
-          "Hungarian",
-          "English"
-        ],
+        "languages": ["Hungarian", "English"],
         "displayLanguageSelector": true
       },
       "webviewInstallMode": {
@@ -54,9 +55,7 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVBQzI0NDQ3QzdCRDU0NjQKUldSa1ZMM0hSMFRDNmtNbVBqcUgzUmxEeWwvOE9hRzJPOSttbWhtcWZrdVNiMWYzc21DZHVXQXMK",
-      "endpoints": [
-        "https://github.com/Misiix9/Tracefold/releases/latest/download/latest.json"
-      ],
+      "endpoints": ["https://github.com/Misiix9/Tracefold/releases/latest/download/latest.json"],
       "windows": {
         "installMode": "passive"
       }

@@ -11,3 +11,4 @@ Updated 10 September 2026 from the user's instructions. This file is durable pro
 - The testing workspace remains offline; update checks/downloads are the explicitly authorized network exception. No telemetry, accounts or application server are introduced.
 - Tell the user when the coworker beta is actually available. Do not claim native Windows capture or installation was tested based solely on cross-compilation.
 - User confirmed public source and public release downloads on 10 September 2026. Use the signed-in Misiix9 account.
+- Updates must be downloaded and installed entirely inside Tracefold. GitHub is the background artifact host; users must never need to visit GitHub or manually download an update installer.

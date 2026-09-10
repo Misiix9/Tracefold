@@ -91,4 +91,46 @@ describe('in-app updater', () => {
     await second.app.dispose();
     expect(second.update.close).toHaveBeenCalledOnce();
   });
+  it('retries a failed restart without downloading or reinstalling, saving any new edits first', async () => {
+    const { app, update, provider } = fixture();
+    provider.relaunch.mockRejectedValueOnce(new Error('restart failed'));
+    await app.check();
+    await app.install();
+    expect(app.error).toContain('was installed');
+    await app.check();
+    expect(provider.check).toHaveBeenCalledOnce();
+    await app.install();
+    expect(provider.prepare).toHaveBeenCalledTimes(2);
+    expect(provider.relaunch).toHaveBeenCalledTimes(2);
+    expect(update.download).toHaveBeenCalledOnce();
+    expect(update.install).toHaveBeenCalledOnce();
+  });
+  it('does not close the active installer when an overlapping check finishes', async () => {
+    const { app, update, provider } = fixture();
+    await app.check();
+    const next = fixture().update;
+    let finishCheck!: (value: AvailableUpdate) => void;
+    provider.check.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishCheck = resolve;
+        }),
+    );
+    const checking = app.check();
+    let finishPrepare!: () => void;
+    provider.prepare.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishPrepare = resolve;
+        }),
+    );
+    const installing = app.install();
+    finishCheck(next);
+    await checking;
+    expect(app.available).toBe(update);
+    expect(update.close).not.toHaveBeenCalled();
+    expect(next.close).toHaveBeenCalledOnce();
+    finishPrepare();
+    await installing;
+  });
 });

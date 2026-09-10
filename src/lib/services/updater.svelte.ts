@@ -26,11 +26,11 @@ export class AppUpdater {
     return this.phase !== 'idle';
   }
   async check() {
-    if (this.checking || this.busy || this.disposed) return;
+    if (this.checking || this.busy || this.disposed || this.installed) return;
     this.checking = true;
     try {
       const update = await this.provider.check();
-      if (this.disposed) {
+      if (this.disposed || this.busy || this.installed) {
         await update?.close();
         return;
       }
@@ -45,13 +45,18 @@ export class AppUpdater {
   }
   async install() {
     const update = this.available;
-    if (!update || this.busy) return;
+    if (!update || this.busy || this.disposed) return;
     this.phase = 'preparing';
     this.error = '';
     this.received = 0;
     this.total = undefined;
     try {
       await this.provider.prepare();
+      if (this.installed) {
+        this.phase = 'restarting';
+        await this.provider.relaunch();
+        return;
+      }
       this.phase = 'downloading';
       await update.download(
         (event) => {
@@ -68,7 +73,7 @@ export class AppUpdater {
     } catch {
       this.error = this.installed
         ? 'The update was installed. Close and reopen Tracefold to finish.'
-        : 'The update could not finish. Your workspace is saved. Try again when ready.';
+        : 'The update could not finish. Check that your work is saved, then try again.';
       this.phase = 'idle';
     }
   }

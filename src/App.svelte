@@ -30,6 +30,7 @@
   const updater = new AppUpdater({
     check: () => check({ timeout: 15000 }),
     prepare: async () => {
+      if (busy || workspace.loading) throw new Error('A workspace operation is still running.');
       await workspace.prepareToClose();
       for (const project of await workspace.repo.listProjects())
         await workspace.repo.createBackup(project.id);
@@ -191,14 +192,21 @@
     }
   }
   async function paste(e: ClipboardEvent) {
+    if (updater.busy || busy) {
+      e.preventDefault();
+      return;
+    }
     const files = Array.from(e.clipboardData?.files ?? []);
     if (!files.length) return;
     e.preventDefault();
+    busy = true;
     try {
       const added = await importEvidence(workspace, files, 'paste');
       if (added[0]) workspace.navigate('evidence', added[0].id);
     } catch (error) {
       workspace.fail(error);
+    } finally {
+      busy = false;
     }
   }
   function beforeUnload(e: BeforeUnloadEvent) {

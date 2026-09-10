@@ -5,7 +5,7 @@
   let { updater, overlay = false }: { updater: AppUpdater; overlay?: boolean } = $props();
   const labels = {
     preparing: 'Saving work and creating recovery backups…',
-    downloading: 'Downloading verified update…',
+    downloading: 'Downloading update…',
     installing: 'Installing update…',
     restarting: 'Restarting Tracefold…',
     idle: '',

@@ -1110,11 +1110,11 @@
   "Updating Tracefold": "A Tracefold frissítése",
   "Version {version}": "{version}. verzió",
   "Saving work and creating recovery backups…": "Munka mentése és helyreállítási másolatok készítése…",
-  "Downloading verified update…": "Ellenőrzött frissítés letöltése…",
+  "Downloading update…": "Frissítés letöltése…",
   "Installing update…": "Frissítés telepítése…",
   "Restarting Tracefold…": "A Tracefold újraindítása…",
   "Update download": "Frissítés letöltése",
   "Your projects, evidence, and settings stay on this device.": "Projektjeid, bizonyítékaid és beállításaid ezen az eszközön maradnak.",
   "The update was installed. Close and reopen Tracefold to finish.": "A frissítés telepítve. A befejezéshez zárd be, majd nyisd meg újra a Tracefoldot.",
-  "The update could not finish. Your workspace is saved. Try again when ready.": "A frissítés nem fejeződött be. A munkaterületed el van mentve. Próbáld újra, amikor készen állsz."
+  "The update could not finish. Check that your work is saved, then try again.": "A frissítés nem fejeződött be. Ellenőrizd, hogy a munkád el van mentve, majd próbáld újra."
 }

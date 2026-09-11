@@ -157,7 +157,10 @@ try {
   session = undefined;
   // Saves were confirmed before terminating this isolated CI app process.
   application.kill();
-  await until(() => application.exitCode !== null, 'app process exit');
+  await until(
+    () => application.exitCode !== null || application.signalCode !== null,
+    'app process exit',
+  );
   await delay(1000);
   await open();
   assert.equal(await execute('return document.documentElement.lang'), 'en');

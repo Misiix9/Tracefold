@@ -196,6 +196,23 @@ try {
     'saved note survives restart',
   );
   await screenshot('reopened-notebook');
+  if (process.env.TRACEFOLD_TEST_CAPTURE === 'true') {
+    await button('Capture');
+    const captured = spawnSync(
+      'pwsh',
+      ['-NoProfile', '-File', 'scripts/windows-capture-smoke.ps1'],
+      { stdio: 'inherit', timeout: 45000 },
+    );
+    if (captured.status !== 0) throw new Error('Native Windows chooser test failed');
+    await until(
+      () =>
+        execute(
+          "return document.body.textContent.includes('Screenshot') && !document.body.textContent.includes('Working…')",
+        ),
+      'captured evidence saved',
+    );
+    await screenshot('native-capture');
+  }
   await verifyUpdate({ execute, button, until, screenshot, detach, attach });
   await writeFile(
     `${directory}/result.json`,

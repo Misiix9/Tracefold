@@ -1109,6 +1109,8 @@
   "Update to newest version": "Frissítés a legújabb verzióra",
   "Count": "Darabszám",
   "Application updates": "Alkalmazásfrissítések",
+  "Installed version": "Telepített verzió",
+  "Available version: {version}": "Elérhető verzió: {version}",
   "Download and install updates inside Tracefold.": "Frissítések letöltése és telepítése a Tracefoldon belül.",
   "Check for updates": "Frissítések keresése",
   "Checking for updates…": "Frissítések keresése…",

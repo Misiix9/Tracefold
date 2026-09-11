@@ -25,3 +25,5 @@ The private signing key is supplied through the repository's `TAURI_SIGNING_PRIV
 Controller tests cover unavailable/offline feeds, backup failure, download/signature failure, ordered save/install/restart, concurrent requests and restart retry. Component tests cover hidden/available states, both languages and progress. Native version-to-version installation, post-update data retention and platform permission behavior are separate acceptance checks; passing unit tests alone is not proof of those checks.
 
 Reference: [Tauri updater documentation](https://v2.tauri.app/plugin/updater/).
+
+On 11 September 2026, the isolated macOS Update QA installation advanced from 0.0.9 to 0.1.0 through the signed local update feed and relaunched. A post-update comparison found project payloads, record payloads, all revisions and evidence SHA-256 hashes identical to the pre-update snapshot. The English preference persisted. This validates the native updater mechanism with an isolated local feed, not the public GitHub distribution path or Windows update installation.

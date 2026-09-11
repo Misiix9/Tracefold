@@ -1,0 +1,54 @@
+name: Windows installer smoke test
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful Windows artifact build run ID
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  smoke:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: tracefold-windows-x64
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+          path: installer
+      - name: Install beta and matching Microsoft test driver
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Get-ChildItem installer -Recurse -Filter '*setup.exe'
+          if ($installer.Count -ne 1) { throw 'Expected exactly one installer' }
+          $installRoot = Join-Path $env:RUNNER_TEMP 'TracefoldSmoke'
+          $process = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
+          $binary = Join-Path $installRoot 'tracefold.exe'
+          if (!(Test-Path $binary)) { throw 'Installed app not found' }
+          "TRACEFOLD_SMOKE_BINARY=$binary" >> $env:GITHUB_ENV
+          $client = 'Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $version = $null
+          foreach ($prefix in @('HKLM:\SOFTWARE\WOW6432Node\', 'HKLM:\SOFTWARE\', 'HKCU:\SOFTWARE\WOW6432Node\', 'HKCU:\SOFTWARE\')) {
+            $candidate = (Get-ItemProperty -Path "$prefix$client" -ErrorAction SilentlyContinue).pv
+            if ($candidate -match '^\d+\.\d+\.\d+\.\d+$') { $version = $candidate; break }
+          }
+          if (!$version) { throw 'WebView2 runtime version missing after installation' }
+          Invoke-WebRequest "https://msedgedriver.microsoft.com/$version/edgedriver_win64.zip" -OutFile driver.zip
+          Expand-Archive driver.zip -DestinationPath driver
+      - name: Verify native UI, saved notes, language and restart
+        run: node scripts/windows-smoke.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: windows-smoke-evidence
+          path: test-results/windows-smoke
+          if-no-files-found: warn

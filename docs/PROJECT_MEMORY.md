@@ -12,3 +12,4 @@ Updated 10 September 2026 from the user's instructions. This file is durable pro
 - Tell the user when the coworker beta is actually available. Do not claim native Windows capture or installation was tested based solely on cross-compilation.
 - User confirmed public source and public release downloads on 10 September 2026. Use the signed-in Misiix9 account.
 - Updates must be downloaded and installed entirely inside Tracefold. GitHub is the background artifact host; users must never need to visit GitHub or manually download an update installer.
+- Settings must display the current installed version dynamically from the native app metadata; show the newer GitHub release separately when discovered. Put the validated coworker Windows installer directly on the user's Desktop.

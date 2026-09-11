@@ -3,14 +3,13 @@
   "identifier": "workspace",
   "description": "Only the local main webview may call the scoped native repository.",
   "local": true,
-  "windows": [
-    "main"
-  ],
+  "windows": ["main"],
   "permissions": [
     "workspace-repository",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:window:allow-destroy",
+    "core:app:allow-version",
     "updater:allow-check",
     "updater:allow-download",
     "updater:allow-install",

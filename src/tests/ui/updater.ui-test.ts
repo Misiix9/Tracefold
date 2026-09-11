@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync, mount, unmount, tick } from 'svelte';
+import { getVersion } from '@tauri-apps/api/app';
+import UpdateSettings from '../../features/updates/UpdateSettings.svelte';
 import UpdateButton from '../../features/updates/UpdateButton.svelte';
 import { AppUpdater } from '../../lib/services/updater.svelte';
 import { setLanguage } from '../../lib/i18n/i18n.svelte';
+vi.mock('@tauri-apps/api/app', () => ({ getVersion: vi.fn() }));
 
 let component: ReturnType<typeof mount> | undefined;
 afterEach(async () => {
@@ -13,6 +16,25 @@ afterEach(async () => {
 });
 
 describe('update availability UI', () => {
+  it('reads the installed version from native metadata and keeps the available version separate', async () => {
+    vi.mocked(getVersion).mockResolvedValue('0.1.7');
+    const updater = new AppUpdater({ check: vi.fn(), prepare: vi.fn(), relaunch: vi.fn() });
+    updater.available = { version: '0.2.0', download: vi.fn(), install: vi.fn(), close: vi.fn() };
+    component = mount(UpdateSettings, { target: document.body, props: { updater } });
+    flushSync();
+    await tick();
+    await tick();
+    flushSync();
+    expect(getVersion).toHaveBeenCalled();
+    expect(document.querySelector('[aria-label="Telepített verzió"]')?.textContent).toContain(
+      '0.1.7',
+    );
+    expect(document.body.textContent).toContain('Elérhető verzió: 0.2.0');
+    flushSync(() => setLanguage('en'));
+    expect(document.querySelector('[aria-label="Installed version"]')?.textContent).toContain(
+      '0.1.7',
+    );
+  });
   it('shows the update action only for an available release and changes UI language', async () => {
     const update = { version: '0.2.0', download: vi.fn(), install: vi.fn(), close: vi.fn() };
     const updater = new AppUpdater({

@@ -1,7 +1,24 @@
 <script lang="ts">
   import { t } from '../../lib/i18n/i18n.svelte';
+  import { onMount } from 'svelte';
+  import { getVersion } from '@tauri-apps/api/app';
   import type { AppUpdater } from '../../lib/services/updater.svelte';
   let { updater }: { updater: AppUpdater } = $props();
+  let installedVersion = $state('');
+  let versionFailed = $state(false);
+  onMount(() => {
+    let active = true;
+    void getVersion()
+      .then((version) => {
+        if (active) installedVersion = version;
+      })
+      .catch(() => {
+        if (active) versionFailed = true;
+      });
+    return () => {
+      active = false;
+    };
+  });
   const messages = {
     never: 'Tracefold checks automatically while you work.',
     current: 'You have the newest available version.',
@@ -13,9 +30,16 @@
 <section class="updates-settings" aria-label={t('Application updates')}>
   <div>
     <h2>{t('Application updates')}</h2>
+    <div class="version-badge" aria-label={t('Installed version')}>
+      <span>{t('Installed version')}</span>
+      <strong>{installedVersion || t(versionFailed ? 'Unavailable' : 'Loading…')}</strong>
+    </div>
     <p>{t('Download and install updates inside Tracefold.')}</p>
   </div>
   <div>
+    {#if updater.available}<p>
+        {t('Available version: {version}', { version: updater.available.version })}
+      </p>{/if}
     <button
       class="button"
       disabled={updater.checking || updater.busy}
@@ -57,6 +81,24 @@
   }
   .details {
     overflow-wrap: anywhere;
+  }
+  .version-badge {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 11px;
+    margin: 4px 0;
+    background: var(--recessed);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .version-badge strong {
+    color: var(--text);
+    font-family: 'iA Writer Mono', monospace;
+    font-weight: 500;
   }
   @media (max-width: 1100px) {
     .updates-settings {

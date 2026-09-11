@@ -126,7 +126,7 @@ try {
   assert.equal(await execute('return document.documentElement.lang'), 'hu');
   await button('Gyorsjegyzet');
   await until(
-    () => execute('return !!document.querySelector("[aria-label=\"Cím\"]")'),
+    () => execute('return !!document.querySelector(arguments[0])', ['[aria-label="Cím"]']),
     'note editor',
   );
   await type('[aria-label="Cím"]', 'Windows beta smoke');

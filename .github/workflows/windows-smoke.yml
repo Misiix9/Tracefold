@@ -21,12 +21,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: tracefold-windows-x64
-          run-id: ${{ inputs.build_run }}
-          github-token: ${{ github.token }}
-          path: installer
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         if: inputs.test_update
         with:
@@ -44,6 +38,16 @@ jobs:
           @{ version = '0.0.9'; bundle = @{ createUpdaterArtifacts = $false }; plugins = @{ updater = @{ endpoints = @('http://127.0.0.1:18421/latest.json'); dangerousInsecureTransportProtocol = $true } } } | ConvertTo-Json -Depth 8 | Set-Content .ci-update-old.json
           pnpm tauri build --bundles nsis --config .ci-update-old.json
           if ($LASTEXITCODE -ne 0) { throw 'Older update fixture build failed' }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: tracefold-windows-x64
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+          path: installer
+      - name: Select the signed update artifact
+        if: inputs.test_update
+        shell: pwsh
+        run: |
           $update = Get-ChildItem installer -Recurse -Filter '*setup.exe'
           if ($update.Count -ne 1) { throw 'Expected one update artifact' }
           "TRACEFOLD_UPDATE_ARTIFACT=$($update.FullName)" >> $env:GITHUB_ENV

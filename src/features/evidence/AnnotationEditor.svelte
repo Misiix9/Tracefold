@@ -169,6 +169,7 @@
   async function save() {
     if (!loaded) return;
     saving = true;
+    const finishOperation = workspace.beginOperation();
     try {
       const flat = await flattenImage(
         bytes,
@@ -200,6 +201,7 @@
       workspace.fail(e);
     } finally {
       saving = false;
+      finishOperation();
     }
   }
 </script>

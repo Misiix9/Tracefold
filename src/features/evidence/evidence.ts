@@ -153,75 +153,85 @@ export async function importEvidence(
   files: File[],
   source: EvidenceData['source'] = 'import',
 ): Promise<Entity<'evidence'>[]> {
-  const projectId = workspace.projectId;
-  const result: Entity<'evidence'>[] = [];
-  for (const file of files) {
-    if (!file.size || file.size > MAX_FILE_BYTES)
-      throw new Error(`${file.name}: choose a nonempty file up to 64 MiB.`);
-    const mime = inferMime(file);
-    let bytes: Uint8Array = await bytesOf(file);
-    let original: Asset | undefined, width: number | undefined, height: number | undefined;
-    let filename = file.name,
-      outputMime = mime;
-    if (['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(mime)) {
-      const clean = await flattenImage(bytes, mime);
-      original = await workspace.repo.importAsset(projectId, file.name, mime, bytes);
-      bytes = clean.bytes;
-      width = clean.width;
-      height = clean.height;
-      filename = file.name.replace(/\.[^.]+$/, '') + '.png';
-      outputMime = 'image/png';
-    } else if (mime.startsWith('image/'))
-      throw new Error(
-        'Import PNG, JPEG, WebP or GIF images. Vector and active image formats are not accepted.',
+  const finishOperation = workspace.beginOperation();
+  try {
+    const projectId = workspace.projectId;
+    const result: Entity<'evidence'>[] = [];
+    for (const file of files) {
+      if (!file.size || file.size > MAX_FILE_BYTES)
+        throw new Error(`${file.name}: choose a nonempty file up to 64 MiB.`);
+      const mime = inferMime(file);
+      let bytes: Uint8Array = await bytesOf(file);
+      let original: Asset | undefined, width: number | undefined, height: number | undefined;
+      let filename = file.name,
+        outputMime = mime;
+      if (['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(mime)) {
+        const clean = await flattenImage(bytes, mime);
+        original = await workspace.repo.importAsset(projectId, file.name, mime, bytes);
+        bytes = clean.bytes;
+        width = clean.width;
+        height = clean.height;
+        filename = file.name.replace(/\.[^.]+$/, '') + '.png';
+        outputMime = 'image/png';
+      } else if (mime.startsWith('image/'))
+        throw new Error(
+          'Import PNG, JPEG, WebP or GIF images. Vector and active image formats are not accepted.',
+        );
+      const asset = await workspace.repo.importAsset(projectId, filename, outputMime, bytes);
+      if (workspace.projectId !== projectId)
+        throw new Error(
+          'The project changed during import. Please import into the selected project again.',
+        );
+      result.push(
+        await workspace.create('evidence', file.name, {
+          ...defaultData('evidence'),
+          ...asset,
+          assetId: asset.id,
+          filename,
+          mimeType: outputMime,
+          source,
+          width,
+          height,
+          originalAssetId: original?.id,
+        }),
       );
-    const asset = await workspace.repo.importAsset(projectId, filename, outputMime, bytes);
-    if (workspace.projectId !== projectId)
-      throw new Error(
-        'The project changed during import. Please import into the selected project again.',
-      );
-    result.push(
-      await workspace.create('evidence', file.name, {
-        ...defaultData('evidence'),
-        ...asset,
-        assetId: asset.id,
-        filename,
-        mimeType: outputMime,
-        source,
-        width,
-        height,
-        originalAssetId: original?.id,
-      }),
-    );
+    }
+    return result;
+  } finally {
+    finishOperation();
   }
-  return result;
 }
 export async function captureEvidence(workspace: Workspace) {
-  const projectId = workspace.projectId,
-    original = await workspace.repo.captureScreen(projectId);
-  if (!original) return null;
-  const clean = await flattenImage(
-    await workspace.repo.readAsset(projectId, original.id),
-    'image/png',
-  );
-  const asset = await workspace.repo.importAsset(
-    projectId,
-    'Screenshot.png',
-    'image/png',
-    clean.bytes,
-  );
-  if (workspace.projectId !== projectId)
-    throw new Error('The project changed during capture. Capture again in the selected project.');
-  return workspace.create('evidence', `Screenshot · ${new Date().toLocaleTimeString()}`, {
-    ...defaultData('evidence'),
-    assetId: asset.id,
-    filename: asset.filename,
-    mimeType: asset.mimeType,
-    hash: asset.hash,
-    size: asset.size,
-    width: clean.width,
-    height: clean.height,
-    originalAssetId: original.id,
-    source: 'capture',
-  });
+  const finishOperation = workspace.beginOperation();
+  try {
+    const projectId = workspace.projectId,
+      original = await workspace.repo.captureScreen(projectId);
+    if (!original) return null;
+    const clean = await flattenImage(
+      await workspace.repo.readAsset(projectId, original.id),
+      'image/png',
+    );
+    const asset = await workspace.repo.importAsset(
+      projectId,
+      'Screenshot.png',
+      'image/png',
+      clean.bytes,
+    );
+    if (workspace.projectId !== projectId)
+      throw new Error('The project changed during capture. Capture again in the selected project.');
+    return await workspace.create('evidence', `Screenshot · ${new Date().toLocaleTimeString()}`, {
+      ...defaultData('evidence'),
+      assetId: asset.id,
+      filename: asset.filename,
+      mimeType: asset.mimeType,
+      hash: asset.hash,
+      size: asset.size,
+      width: clean.width,
+      height: clean.height,
+      originalAssetId: original.id,
+      source: 'capture',
+    });
+  } finally {
+    finishOperation();
+  }
 }

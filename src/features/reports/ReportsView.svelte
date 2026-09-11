@@ -79,6 +79,7 @@
   async function save() {
     if (!snapshot) return;
     busy = true;
+    const finishOperation = workspace.beginOperation();
     try {
       const output = await exportReport($state.snapshot(snapshot), format === 'tracefold');
       if (await workspace.repo.saveFile(output.filename, output.mimeType, output.bytes))
@@ -87,6 +88,7 @@
       workspace.fail(e);
     } finally {
       busy = false;
+      finishOperation();
     }
   }
   function invalidate() {

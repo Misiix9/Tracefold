@@ -1110,6 +1110,7 @@
   "Count": "Darabszám",
   "Application updates": "Alkalmazásfrissítések",
   "Installed version": "Telepített verzió",
+  "Wait for the current file operation to finish, then try again.": "Várd meg a folyamatban lévő fájlművelet befejezését, majd próbáld újra.",
   "Available version: {version}": "Elérhető verzió: {version}",
   "Download and install updates inside Tracefold.": "Frissítések letöltése és telepítése a Tracefoldon belül.",
   "Check for updates": "Frissítések keresése",

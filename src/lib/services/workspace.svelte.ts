@@ -31,6 +31,18 @@ export class Workspace {
   private draining: Promise<void> | null = null;
   private alertTimer: ReturnType<typeof setTimeout> | undefined;
   private sessionTimer: ReturnType<typeof setInterval>;
+  private activeOperations = 0;
+  /** Capture/import/export must finish before closing or replacing the app. */
+  beginOperation() {
+    this.activeOperations++;
+    let finished = false;
+    return () => {
+      if (!finished) {
+        this.activeOperations--;
+        finished = true;
+      }
+    };
+  }
   constructor(repo: WorkspaceRepository) {
     this.repo = repo;
     this.sessionTimer = setInterval(() => {
@@ -53,6 +65,8 @@ export class Workspace {
     return next;
   }
   async prepareToClose() {
+    if (this.activeOperations)
+      throw new Error(t('Wait for the current file operation to finish, then try again.'));
     this.checkpointSessions(true);
     await this.flush();
     await this.settingsWrite.catch(() => this.persistSettings());

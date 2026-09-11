@@ -21,6 +21,20 @@ function setup() {
   return { workspace, record, write, saved };
 }
 describe('durable autosave acknowledgements', () => {
+  it('prevents close or update preparation until every file operation is finished', async () => {
+    const { workspace, record, saved } = setup();
+    const finishImport = workspace.beginOperation();
+    const finishCapture = workspace.beginOperation();
+    workspace.edit({ ...record, title: 'Keep this edit' });
+    await expect(workspace.prepareToClose()).rejects.toThrow();
+    finishImport();
+    finishImport();
+    await expect(workspace.prepareToClose()).rejects.toThrow();
+    finishCapture();
+    await workspace.prepareToClose();
+    expect(saved.at(-1)?.title).toBe('Keep this edit');
+    workspace.dispose();
+  });
   it('serializes preference writes so an older write cannot finish last', async () => {
     let release!: () => void;
     const saved: string[] = [];

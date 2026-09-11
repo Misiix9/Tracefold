@@ -8,7 +8,7 @@ if (process.platform !== 'win32' || process.env.GITHUB_ACTIONS !== 'true')
   throw new Error('This installer smoke test is restricted to Windows CI.');
 const directory = 'test-results/windows-smoke';
 await mkdir(directory, { recursive: true });
-const driver = spawn(resolve('driver/msedgedriver.exe'), ['--port=9515'], {
+const driver = spawn(resolve('driver/msedgedriver.exe'), ['--port=9515', '--verbose'], {
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let driverLog = '';
@@ -45,6 +45,8 @@ async function until(task, description, timeout = 30000) {
   throw new Error(`${description}: ${last ?? 'timed out'}`);
 }
 let session;
+let application;
+let appLog = '';
 const execute = (script, args = []) =>
   request(`/session/${session}/execute/sync`, { script, args });
 const button = async (text) => {
@@ -71,11 +73,37 @@ const type = async (selector, text) => {
   await request(`${path}/value`, { text });
 };
 async function open() {
+  application = spawn(process.env.TRACEFOLD_SMOKE_BINARY, [], {
+    env: {
+      ...process.env,
+      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9222',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  application.stdout.on('data', (value) => {
+    appLog += value;
+  });
+  application.stderr.on('data', (value) => {
+    appLog += value;
+  });
+  application.on('exit', (code) => {
+    appLog += `\nApplication exit: ${code}\n`;
+  });
+  application.on('error', (error) => {
+    appLog += `\n${error}\n`;
+  });
+  await until(async () => {
+    if (application.exitCode !== null) throw new Error(`App exited: ${application.exitCode}`);
+    const response = await fetch('http://127.0.0.1:9222/json/version', {
+      signal: AbortSignal.timeout(2000),
+    });
+    return response.ok;
+  }, 'installed WebView2 startup');
   const created = await request('/session', {
     capabilities: {
       alwaysMatch: {
         browserName: 'webview2',
-        'ms:edgeOptions': { binary: process.env.TRACEFOLD_SMOKE_BINARY },
+        'ms:edgeOptions': { debuggerAddress: '127.0.0.1:9222' },
       },
     },
   });
@@ -127,6 +155,9 @@ try {
   await screenshot('english-settings');
   await request(`/session/${session}`, undefined, 'DELETE');
   session = undefined;
+  // Saves were confirmed before terminating this isolated CI app process.
+  application.kill();
+  await until(() => application.exitCode !== null, 'app process exit');
   await delay(1000);
   await open();
   assert.equal(await execute('return document.documentElement.lang'), 'en');
@@ -168,6 +199,8 @@ try {
   throw error;
 } finally {
   if (session) await request(`/session/${session}`, undefined, 'DELETE').catch(() => {});
+  application?.kill();
   driver.kill();
+  await writeFile(`${directory}/app.log`, appLog);
   await writeFile(`${directory}/driver.log`, driverLog);
 }

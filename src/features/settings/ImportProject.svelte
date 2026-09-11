@@ -34,6 +34,7 @@
   }
   async function confirm() {
     if (!preview) return;
+    const finishOperation = workspace.beginOperation();
     busy = true;
     error = '';
     try {
@@ -50,6 +51,7 @@
       error = errorText(e);
     } finally {
       busy = false;
+      finishOperation();
     }
   }
 </script>

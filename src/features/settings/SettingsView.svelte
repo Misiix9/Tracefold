@@ -36,6 +36,7 @@
   }
   async function backup() {
     busy = true;
+    const finishOperation = workspace.beginOperation();
     try {
       await workspace.flush();
       await workspace.repo.createBackup(workspace.projectId);
@@ -45,10 +46,12 @@
       workspace.fail(e);
     } finally {
       busy = false;
+      finishOperation();
     }
   }
   async function restore(id: string) {
     busy = true;
+    const finishOperation = workspace.beginOperation();
     try {
       const project = await workspace.repo.restoreBackup(id, workspace.projectId);
       workspace.projects = await workspace.repo.listProjects();
@@ -59,10 +62,12 @@
       workspace.fail(e);
     } finally {
       busy = false;
+      finishOperation();
     }
   }
   async function exportBackup(id?: string) {
     busy = true;
+    const finishOperation = workspace.beginOperation();
     try {
       await workspace.flush();
       const projectId = workspace.projectId;
@@ -74,10 +79,12 @@
       workspace.fail(e);
     } finally {
       busy = false;
+      finishOperation();
     }
   }
   async function restoreFile() {
     busy = true;
+    const finishOperation = workspace.beginOperation();
     try {
       await workspace.flush();
       const project = await workspace.repo.restoreBackupFile();
@@ -90,6 +97,7 @@
       workspace.fail(e);
     } finally {
       busy = false;
+      finishOperation();
     }
   }
   async function saveProject() {
@@ -108,6 +116,7 @@
   async function archive() {
     if (!workspace.project) return;
     busy = true;
+    const finishOperation = workspace.beginOperation();
     try {
       await workspace.flush();
       await workspace.repo.saveProject(
@@ -123,6 +132,7 @@
       workspace.fail(e);
     } finally {
       busy = false;
+      finishOperation();
     }
   }
 </script>

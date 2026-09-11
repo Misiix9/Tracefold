@@ -259,6 +259,7 @@
     </nav>
     <div class="sidebar-footer">
       <UpdateButton {updater} />
+      <hr class="sidebar-divider" />
       <button
         class="nav-item"
         title={t('Settings and recovery')}

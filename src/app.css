@@ -465,8 +465,11 @@ kbd {
 }
 .sidebar-footer {
   margin-top: auto;
-  padding-top: 12px;
+}
+.sidebar-divider {
+  border: 0;
   border-top: 1px solid var(--line);
+  margin: 0 0 12px;
 }
 .local-indicator {
   display: flex;

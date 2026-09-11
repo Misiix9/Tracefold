@@ -1,6 +1,6 @@
 // Runs only in an isolated GitHub Windows runner against the installed NSIS app.
 // The driver comes directly from Microsoft and is never bundled with Tracefold.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
@@ -189,6 +189,10 @@ try {
     ),
   );
 } catch (error) {
+  spawnSync('pwsh', ['-NoProfile', '-File', 'scripts/windows-smoke-diagnostics.ps1'], {
+    stdio: 'inherit',
+    timeout: 15000,
+  });
   if (session) {
     await screenshot('failure').catch(() => {});
     await writeFile(

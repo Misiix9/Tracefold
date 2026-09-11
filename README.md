@@ -1,44 +1,29 @@
-# Tracefold · Beta 0.1 in development
+# Tracefold
 
-An offline desktop companion for testers. Document observations, investigate findings, organize test cases and runs, attach evidence, and prepare reviewed reports without an application server.
+**Your testing notes, evidence, and reports. Together, on your desktop.**
 
-**Release status:** development builds exist, but the complete platform and feature acceptance matrix is still being verified. A successful build is not a claim that every capture backend, installer or updater path has been exercised on real hardware. See [implementation status](docs/IMPLEMENTATION_STATUS.md).
+Tracefold helps testers record what they tried, explain what went wrong, and share clear results—without juggling documents or setting up a server.
 
-The interface defaults to Hungarian and also supports English. Fonts are bundled locally: Lexend, Newsreader, and iA Writer Mono. Windows, macOS and Linux use the same Svelte UI with a Tauri/Rust and SQLite backend.
+- Capture notes, findings, expected behavior, and retest results.
+- Organize test cases, runs, coverage, and reusable templates.
+- Attach screenshots and files; annotate, crop, and redact images.
+- Export reviewed reports as PDF, Word, HTML, Markdown, CSV, or JSON.
+- Work offline with local backups. Hungarian by default; English in Settings.
 
-## Development
+## Get Tracefold
 
-Install Node.js 24+, pnpm 11.19.0, current stable Rust, and [Tauri's platform prerequisites](https://v2.tauri.app/start/prerequisites/).
+**Beta 0.1 is being validated.** Installers will appear on the [Releases page](https://github.com/Misiix9/Tracefold/releases) when ready.
 
-```sh
-pnpm install --frozen-lockfile
-pnpm check
-pnpm test
-pnpm test:ui
-cargo test --locked --manifest-path src-tauri/Cargo.toml
-pnpm desktop:dev
-```
+| Your computer | Download |
+|---|---|
+| Windows 10/11 · 64-bit | `Setup.exe` |
+| macOS 14+ · Apple Silicon | `.dmg` |
+| Linux · 64-bit | `.AppImage` or `.deb` |
 
-`pnpm dev` alone opens a browser preview backed by separate IndexedDB development storage. It does not use native project files. `pnpm desktop:dev` runs the actual desktop repository.
+Open Tracefold and choose **Quick note** to start. See the [quick guide in Hungarian and English](docs/QUICK_START.md) for more.
 
-## Packaging
+## Your work stays yours
 
-GitHub Actions builds native Windows x64, macOS ARM64 and Linux x64 packages. Installers and update payloads are artifacts until the release checklist is complete. Windows uses NSIS `Setup.exe` and bundles the WebView2 offline installer; this increases download size but allows installation without fetching a runtime. Runtime testing remains offline except for optional update checks/downloads.
+No account, telemetry, or cloud upload. Projects and evidence stay on your device. Use **Settings & recovery** to save a backup somewhere safe.
 
-A release signer must supply `TAURI_SIGNING_PRIVATE_KEY` (and its password if set). The private signing key is never committed or included in applications. The embedded public key verifies downloaded updates. The OS code-signing/notarization process is separate from updater signing; unsigned beta builds are identified as such.
-
-## Data and updates
-
-Projects, original evidence, settings and history live in the OS application data directory, separate from the application installation. Updating saves pending edits and creates independent project backups before replacing executable files. The interface shows **Update to newest version** above Settings only when a newer version is available. Clicking it downloads, verifies, installs and restarts internally; users do not need to browse GitHub.
-
-Project data is never uploaded for updates. The only network exception to local operation is the public GitHub release feed and signed artifact download. Back up valuable work to a separate device; see [backup format and recovery](docs/BACKUP_FORMAT.md).
-
-## Project documents
-
-- [Product contract](docs/PRODUCT_SPEC.md)
-- [Persistent release requirements](docs/PROJECT_MEMORY.md)
-- [Capture architecture](docs/CAPTURE.md)
-- [Windows capture validation](docs/WINDOWS_CAPTURE_VALIDATION.md)
-- [Implementation ledger](docs/IMPLEMENTATION_STATUS.md)
-
-No accounts, telemetry, cloud synchronization, shared-database workflow or hosted application backend are included.
+Settings shows your installed version. When an update is available, a purple button appears above the divider preceding Settings. Tracefold downloads, verifies, and installs the update inside the app, preserving your work. Internet access is only needed for update checks and downloads.

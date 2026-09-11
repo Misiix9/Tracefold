@@ -44,6 +44,14 @@ jobs:
           if (!$version) { throw 'WebView2 runtime version missing after installation' }
           Invoke-WebRequest "https://msedgedriver.microsoft.com/$version/edgedriver_win64.zip" -OutFile driver.zip
           Expand-Archive driver.zip -DestinationPath driver
+      - name: Enable isolated CI driver attachment
+        shell: pwsh
+        run: |
+          # Elevated WebView2 ignores environment overrides. This disposable runner
+          # uses the documented machine policy for this executable only.
+          $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
+          New-Item $key -Force | Out-Null
+          New-ItemProperty $key -Name 'tracefold.exe' -Value '--remote-debugging-port=9222' -PropertyType String -Force | Out-Null
       - name: Verify native UI, saved notes, language and restart
         run: node scripts/windows-smoke.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

@@ -16,7 +16,7 @@ The target-specific adapter uses published ashpd 0.13.13, with only Tokio and sc
 
 A private bus connection is closed after the operation or timeout. Returned URIs must be absolute local file URIs without remote hosts, query strings or fragments. The reader rejects symlinks/FIFOs/nonregular files and bounds bytes. Portal-owned files are not deleted because they may be user-owned exports. There is no direct X11 capture fallback yet; X11 desktops with the portal can use the same path.
 
-Sources: [ashpd screenshot module](https://docs.rs/ashpd/0.13.13/ashpd/desktop/screenshot/index.html), and the installed crate source corresponding to Cargo.lock. Linux compilation and real portal backend tests remain pending.
+Sources: [ashpd screenshot module](https://docs.rs/ashpd/0.13.13/ashpd/desktop/screenshot/index.html), and the installed crate source corresponding to Cargo.lock. The native Linux build and tests passed in GitHub Actions on 10 September 2026. Real portal backend interaction remains pending.
 
 ## Windows
 
@@ -26,7 +26,7 @@ After selection, a free-threaded one-frame pool supplies a BGRA surface. The ada
 
 Capabilities test OS/API support without opening a picker or taking a screenshot. Permission denial and API failure are distinct from cancellation. A cancelled picker creates no evidence. A resizing target that outgrows the allocated frame is rejected. This is an SDR path; HDR color fidelity and mixed-DPI behavior remain release gates, not validated claims.
 
-Validation currently includes Windows x64 cross-target Rust type-checking of the actual capture module and four executable pixel/layout/bounds tests on macOS. This does not link or run the Windows app. See WINDOWS_CAPTURE_VALIDATION.md for the remaining native matrix.
+Validation includes a native Windows x64 build, the native unit tests and successful NSIS installation in GitHub Actions. The installed application launch test is still under investigation; interactive capture has not passed. See WINDOWS_CAPTURE_VALIDATION.md for the remaining native matrix.
 
 Sources: [Microsoft screen capture guide](https://learn.microsoft.com/en-us/windows/apps/develop/media-authoring-processing/screen-capture), [desktop picker initialization](https://learn.microsoft.com/en-us/windows/apps/develop/ui/display-ui-objects), [Win32CaptureSample](https://github.com/robmikh/Win32CaptureSample), and the windows 0.61.3 generated bindings pinned in Cargo.lock.
 

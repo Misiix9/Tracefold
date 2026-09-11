@@ -1,12 +1,12 @@
 # In-app updates and releases
 
-Tracefold checks for a newer compatible release shortly after opening and every four hours while running. When a release exists, a purple **Update to newest version** action appears directly above Settings (localized in Hungarian). Clicking it saves pending edits, pauses active session timers, backs up projects, downloads the signed artifact, installs it and restarts. Download progress stays inside the app; Windows may show its native installation progress window. Users do not visit GitHub or manually download updates.
+Tracefold checks for a newer compatible release shortly after opening and every four hours while running. When a release exists, a purple **Update to newest version** action appears above the divider preceding Settings (localized in Hungarian). Clicking it saves pending edits, pauses active session timers, backs up projects, downloads the signed artifact, installs it and restarts. Download progress stays inside the app; Windows may show its native installation progress window. Users do not visit GitHub or manually download updates.
 
 The workspace has no application server or account. GitHub Releases serves public, static update files over HTTPS. Offline or unavailable-feed checks are quiet and do not interrupt testing. The plugin verifies the artifact against the embedded public key before installation. An interrupted check or invalid download cannot trigger installation. A failed restart can be retried without downloading or installing again, after saving any intervening edits.
 
 ## Data preservation
 
-The stable application identifier is `local.tracefold.desktop`. Local projects, evidence, history and settings are stored in the OS application-data directory, outside the installed application. Releases must retain that identifier and storage layout; any future schema migration requires compatibility and recovery tests. The update flow flushes edits and settings and creates a recovery backup for every project before installing. Failure to save or back up prevents installation. No updater invokes uninstall/data-removal commands.
+The stable application identifier is `local.tracefold.desktop`. Local projects, evidence, history and settings are stored in the OS application-data directory, outside the installed application. Releases must retain that identifier and storage layout; any future schema migration requires compatibility and recovery tests. The update flow flushes edits and settings and creates a recovery backup for every project before installing. Failure to save or back up prevents installation. Active capture, evidence import, annotation save, report export and backup/restore operations block an update until they finish. No updater invokes uninstall/data-removal commands.
 
 ## Publishing
 
@@ -27,3 +27,7 @@ Controller tests cover unavailable/offline feeds, backup failure, download/signa
 Reference: [Tauri updater documentation](https://v2.tauri.app/plugin/updater/).
 
 On 11 September 2026, the isolated macOS Update QA installation advanced from 0.0.9 to 0.1.0 through the signed local update feed and relaunched. A post-update comparison found project payloads, record payloads, all revisions and evidence SHA-256 hashes identical to the pre-update snapshot. The English preference persisted. This validates the native updater mechanism with an isolated local feed, not the public GitHub distribution path or Windows update installation.
+
+## Installed version
+
+Settings displays the running application version using Tauri `getVersion()`. This remains accurate offline. The GitHub feed describes the available release separately and never replaces the installed version badge. Both labels and error states are localized.

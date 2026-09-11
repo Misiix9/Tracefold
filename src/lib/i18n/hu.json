@@ -1128,5 +1128,8 @@
   "Update download": "Frissítés letöltése",
   "Your projects, evidence, and settings stay on this device.": "Projektjeid, bizonyítékaid és beállításaid ezen az eszközön maradnak.",
   "The update was installed. Close and reopen Tracefold to finish.": "A frissítés telepítve. A befejezéshez zárd be, majd nyisd meg újra a Tracefoldot.",
-  "The update could not finish. Check that your work is saved, then try again.": "A frissítés nem fejeződött be. Ellenőrizd, hogy a munkád el van mentve, majd próbáld újra."
+  "The update could not finish. Check that your work is saved, then try again.": "A frissítés nem fejeződött be. Ellenőrizd, hogy a munkád el van mentve, majd próbáld újra.",
+  "Technical details": "Technikai részletek",
+  "Unavailable": "Nem elérhető",
+  "Loading…": "Betöltés…"
 }

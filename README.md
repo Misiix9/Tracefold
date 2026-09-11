@@ -1,6 +1,12 @@
-# Tracefold
+<div align="center">
+  <img src="src-tauri/icons/128x128.png" alt="Tracefold logo" width="88" height="88" />
+  <h1>Tracefold</h1>
+  <p><strong>Your testing notes, evidence, and reports.<br />Together, on your desktop.</strong></p>
+  <p>Windows · macOS · Linux &nbsp; / &nbsp; Magyar · English</p>
+  <p><a href="https://github.com/Misiix9/Tracefold/releases">Downloads</a> &nbsp; · &nbsp; <a href="docs/QUICK_START.md">Quick guide / Rövid útmutató</a></p>
+</div>
 
-**Your testing notes, evidence, and reports. Together, on your desktop.**
+---
 
 Tracefold helps testers record what they tried, explain what went wrong, and share clear results—without juggling documents or setting up a server.
 

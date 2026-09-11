@@ -4,6 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
+import { startUpdateFixture, verifyUpdate } from './windows-update-smoke.mjs';
 if (process.platform !== 'win32' || process.env.GITHUB_ACTIONS !== 'true')
   throw new Error('This installer smoke test is restricted to Windows CI.');
 const directory = 'test-results/windows-smoke';
@@ -99,6 +100,9 @@ async function open() {
     });
     return response.ok;
   }, 'installed WebView2 startup');
+  await attach();
+}
+async function attach() {
   const created = await request('/session', {
     capabilities: {
       alwaysMatch: {
@@ -116,10 +120,15 @@ async function open() {
     'workspace startup',
   );
 }
+async function detach() {
+  if (session) await request(`/session/${session}`, undefined, 'DELETE').catch(() => {});
+  session = undefined;
+}
 async function screenshot(name) {
   const png = await request(`/session/${session}/screenshot`, undefined, 'GET');
   await writeFile(`${directory}/${name}.png`, Buffer.from(png, 'base64'));
 }
+const updateServer = await startUpdateFixture();
 try {
   await until(() => request('/status', undefined, 'GET'), 'Microsoft driver startup');
   await open();
@@ -134,6 +143,21 @@ try {
   await until(
     () => execute("return document.body.textContent.includes('Helyben mentve')"),
     'note saved',
+  );
+  const fileInput = await request(`/session/${session}/element`, {
+    using: 'css selector',
+    value: 'input[type="file"]',
+  });
+  await request(
+    `/session/${session}/element/${fileInput['element-6066-11e4-a52e-4f735466cecf']}/value`,
+    { text: resolve('src-tauri/icons/128x128.png') },
+  );
+  await until(
+    () =>
+      execute(
+        "return document.body.textContent.includes('128x128.png') && document.body.textContent.includes('Helyben mentve')",
+      ),
+    'native evidence import',
   );
   await screenshot('hungarian-note');
   await button('Beállítások és helyreállítás');
@@ -172,6 +196,7 @@ try {
     'saved note survives restart',
   );
   await screenshot('reopened-notebook');
+  await verifyUpdate({ execute, button, until, screenshot, detach, attach });
   await writeFile(
     `${directory}/result.json`,
     JSON.stringify(
@@ -182,6 +207,7 @@ try {
           'native startup',
           'Hungarian default',
           'rich text save',
+          'native evidence import',
           'English switch',
           'recovery backup',
           'restart persistence',
@@ -206,6 +232,8 @@ try {
   throw error;
 } finally {
   if (session) await request(`/session/${session}`, undefined, 'DELETE').catch(() => {});
+  updateServer?.closeAllConnections();
+  updateServer?.close();
   application?.kill();
   driver.kill();
   await writeFile(`${directory}/app.log`, appLog);

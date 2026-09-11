@@ -5,13 +5,17 @@ on:
       build_run:
         description: Successful Windows artifact build run ID
         required: true
+      test_update:
+        description: Build an older version and verify a real in-app upgrade
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
 jobs:
   smoke:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -23,11 +27,31 @@ jobs:
           run-id: ${{ inputs.build_run }}
           github-token: ${{ github.token }}
           path: installer
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        if: inputs.test_update
+        with:
+          version: '11.19.0'
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        if: inputs.test_update
+        with:
+          toolchain: stable
+      - name: Build isolated older-version update fixture
+        if: inputs.test_update
+        shell: pwsh
+        run: |
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency install failed' }
+          @{ version = '0.0.9'; bundle = @{ createUpdaterArtifacts = $false }; plugins = @{ updater = @{ endpoints = @('http://127.0.0.1:18421/latest.json'); dangerousInsecureTransportProtocol = $true } } } | ConvertTo-Json -Depth 8 | Set-Content .ci-update-old.json
+          pnpm tauri build --bundles nsis --config .ci-update-old.json
+          if ($LASTEXITCODE -ne 0) { throw 'Older update fixture build failed' }
+          $update = Get-ChildItem installer -Recurse -Filter '*setup.exe'
+          if ($update.Count -ne 1) { throw 'Expected one update artifact' }
+          "TRACEFOLD_UPDATE_ARTIFACT=$($update.FullName)" >> $env:GITHUB_ENV
       - name: Install beta and matching Microsoft test driver
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $installer = Get-ChildItem installer -Recurse -Filter '*setup.exe'
+          $installer = if ($env:TRACEFOLD_UPDATE_ARTIFACT) { Get-ChildItem src-tauri/target/release/bundle/nsis -Filter '*setup.exe' } else { Get-ChildItem installer -Recurse -Filter '*setup.exe' }
           if ($installer.Count -ne 1) { throw 'Expected exactly one installer' }
           $installRoot = Join-Path $env:RUNNER_TEMP 'TracefoldSmoke'
           $process = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru

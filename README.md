@@ -17,7 +17,7 @@ Tracefold helps testers record what they tried, explain what went wrong, and sha
 | Your computer | Download |
 |---|---|
 | Windows 10/11 · 64-bit | `Setup.exe` |
-| macOS 14+ · Apple Silicon | `.dmg` |
+| macOS 14+ · Intel & Apple Silicon | `.dmg` |
 | Linux · 64-bit | `.AppImage` or `.deb` |
 
 Open Tracefold and choose **Quick note** to start. See the [quick guide in Hungarian and English](docs/QUICK_START.md) for more.

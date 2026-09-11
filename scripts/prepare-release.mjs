@@ -30,7 +30,8 @@ async function files(dir) {
 const artifacts = await files(input);
 const targets = [
   ['windows-x86_64', 'windows-x64', /\.exe$/],
-  ['darwin-aarch64', 'macos-arm64', /\.app\.tar\.gz$/],
+  ['darwin-aarch64', 'macos-universal', /\.app\.tar\.gz$/],
+  ['darwin-x86_64', 'macos-universal', /\.app\.tar\.gz$/],
   ['linux-x86_64', 'linux-x64', /\.AppImage$/],
 ];
 const manifest = {

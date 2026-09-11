@@ -19,7 +19,8 @@ jobs:
             artifact: windows-x64
             bundles: nsis
           - os: macos-14
-            artifact: macos-arm64
+            artifact: macos-universal
+            target: universal-apple-darwin
             bundles: app,dmg
           - os: ubuntu-22.04
             artifact: linux-x64
@@ -36,6 +37,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
           toolchain: stable
+      - name: macOS universal targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - name: Linux native dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev
@@ -45,7 +49,7 @@ jobs:
       - run: pnpm test:ui
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - name: Build signed update artifacts
-        run: pnpm tauri build --bundles ${{ matrix.bundles }}
+        run: pnpm tauri build --bundles ${{ matrix.bundles }} ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
@@ -56,8 +60,8 @@ jobs:
           retention-days: 14
           path: |
             src-tauri/target/release/bundle/nsis/*
-            src-tauri/target/release/bundle/macos/*.tar.gz*
-            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.tar.gz*
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
             src-tauri/target/release/bundle/deb/*.deb
             src-tauri/target/release/bundle/appimage/*.AppImage*
   publish:

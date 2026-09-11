@@ -12,7 +12,7 @@ The stable application identifier is `local.tracefold.desktop`. Local projects, 
 
 1. Update the same version in package.json, src-tauri/Cargo.toml and src-tauri/tauri.conf.json; refresh lockfiles.
 2. Complete the release checks and add `docs/releases/vX.Y.Z.md` with user-facing changes and actual known limitations.
-3. Commit, then push the matching `vX.Y.Z` tag. The build workflow tests and builds Windows x64, macOS Apple Silicon and Linux x64 packages natively.
+3. Commit, then push the matching `vX.Y.Z` tag. The build workflow tests and builds Windows x64, macOS Intel/Apple Silicon universal and Linux x64 packages natively.
 4. The publish job independently verifies every update signature, prepares per-platform URLs and signatures in `latest.json`, adds SHA-256 checksums, uploads everything to a draft release, then publishes the complete release. A failed platform build or signature check prevents publication.
 5. Verify public download URLs, the update feed and an actual installed-version upgrade before announcing availability. Never replace an existing version's assets: publish a new version for fixes.
 

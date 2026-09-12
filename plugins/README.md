@@ -2,11 +2,11 @@
 
 Tracefold uses isolated loopback-web plugins for specialist tools.
 
-## Included plugin
+## First plugin
 
 - `tracefold.discovery`: authenticated website/API discovery and multi-user authorization testing.
 
-The bundled Discovery package is kept under `plugins/tracefold-discovery/` and is also embedded into desktop builds. It can therefore be installed without downloading a plugin from an unknown source.
+The Discovery package is distributed as a reviewed `.tracefold-plugin` artifact. Tracefold does not silently download and execute plugin code from an unknown source.
 
 ## Planned plugins
 

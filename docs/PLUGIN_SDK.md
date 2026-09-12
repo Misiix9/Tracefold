@@ -1,6 +1,8 @@
 # Tracefold Plugin SDK v1
 
-Tracefold plugins are isolated tools that extend the desktop app without putting specialist code inside the core workspace.
+Tracefold plugins extend the desktop app without putting specialist code inside the core workspace.
+
+**Important beta security model:** plugins are trusted local code. They run as the same OS user as Tracefold and are **not sandboxed by Tracefold**. Do not install a plugin package unless you trust its publisher and source. The capability list is currently declarative metadata for transparency, not an OS-level permission boundary.
 
 ## Runtime model
 
@@ -8,7 +10,9 @@ The first runtime is `loopback-web`.
 
 A plugin is an ordinary package containing a root `manifest.json` and an entrypoint. Tracefold installs it under its private application data directory, starts it on `127.0.0.1`, and opens it in a separate Tauri window.
 
-The plugin never receives direct access to the Tracefold SQLite database.
+The host keeps the plugin URL and allocated port in host-owned runtime state rather than trusting files inside the plugin directory.
+
+Plugin persistent data is stored outside the installed code directory, so replacing a plugin package does not erase its persistent data.
 
 ## Manifest
 
@@ -50,23 +54,38 @@ Tracefold expands these values in runtime arguments:
 The host also provides:
 
 - `TRACEFOLD_PLUGIN_ID`
-- `TRACEFOLD_PLUGIN_DATA_DIR`
+- `TRACEFOLD_PLUGIN_VERSION`
+- `TRACEFOLD_PLUGIN_API_VERSION`
+- `TRACEFOLD_PLUGIN_BIND`
 - `TRACEFOLD_PLUGIN_PORT`
+- `TRACEFOLD_PLUGIN_DATA_DIR`
 
-## Security rules
+## Security and package rules
 
-Plugins must:
+Plugins are trusted local code. The beta host does **not** provide an OS sandbox, filesystem sandbox, network sandbox, or secret-store permission boundary.
 
-1. Bind only to `127.0.0.1` unless a future capability explicitly permits another interface.
-2. Declare every capability in the manifest.
-3. Never collect secrets without explaining why the capability is required.
-4. Never modify Tracefold project files directly.
-5. Keep plugin data under the supplied data directory.
-6. Treat all imported target data as untrusted.
-7. Require confirmation before destructive testing.
-8. Keep reports free of passwords, cookies, bearer tokens, and private keys.
+The host does enforce package/runtime hygiene:
 
-Tracefold rejects absolute paths, parent traversal, backslashes, oversized packages, invalid IDs, and unsupported manifest schemas during installation.
+1. Plugin IDs must be safe single path components and cannot be `.` or `..`.
+2. Package paths cannot be absolute, use backslashes, or contain parent/current-directory components.
+3. Packages are staged before installation and existing versions are preserved until the replacement succeeds.
+4. Failed replacement restores the previous plugin when possible.
+5. Installed plugin code and persistent plugin data live in separate directories.
+6. `loopback-web` manifests must declare `127.0.0.1` and a local health path.
+7. Runtime readiness requires an actual HTTP 2xx response from the declared health endpoint.
+8. Plugin processes are reaped when they exit, and stop/shutdown terminates the process tree.
+9. Package and unpacked-file limits are enforced while files are streamed into host-owned staging storage.
+10. Destructive plugin actions in the UI require explicit confirmation where appropriate.
+
+Plugin authors must:
+
+- declare every capability in the manifest;
+- never collect secrets without explaining why the capability is required;
+- never modify Tracefold project files directly unless a future, explicit host API permits it;
+- keep plugin data under the supplied data directory;
+- treat all imported target data as untrusted;
+- require confirmation before destructive testing;
+- keep reports free of passwords, cookies, bearer tokens, and private keys.
 
 ## Local development
 
@@ -76,7 +95,7 @@ The simplest development workflow is:
 2. Start its loopback server on a local port.
 3. Install the plugin package into a development Tracefold workspace.
 4. Verify the manifest and capabilities.
-5. Test enable, disable, start, stop, update, and removal.
+5. Test enable, disable, start, stop, update, rollback, and removal.
 
 ## Discovery plugin
 
@@ -97,4 +116,5 @@ The SDK will grow toward:
 - compatibility negotiation;
 - background update checks;
 - rollback hooks;
-- test harnesses for plugin permissions.
+- test harnesses for plugin permissions;
+- OS-level sandboxing and capability enforcement.

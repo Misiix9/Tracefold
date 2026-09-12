@@ -327,15 +327,26 @@ impl PluginRuntime {
             }
             std::thread::sleep(Duration::from_millis(100));
         }
-        let _ = self.stop(id);
+        let _ = self.stop_running_process(id);
         Err(plugin_error("PLUGIN_RUNTIME", "The plugin runtime did not become ready within 120 seconds."))
     }
 
     pub fn stop(&self, id: &str) -> Result<()> {
         validate_id(id)?;
         if self.starting.lock().map_err(|_| plugin_error("PLUGIN_RUNTIME", "Plugin runtime state is unavailable."))?.contains(id) {
-            return Err(plugin_error("PLUGIN_RUNTIME", "The plugin is still starting. Wait for startup to finish before stopping it."));
+            let deadline = Instant::now() + START_TIMEOUT;
+            while Instant::now() < deadline {
+                if !self.starting.lock().map_err(|_| plugin_error("PLUGIN_RUNTIME", "Plugin runtime state is unavailable."))?.contains(id) { break; }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            if self.starting.lock().map_err(|_| plugin_error("PLUGIN_RUNTIME", "Plugin runtime state is unavailable."))?.contains(id) {
+                return Err(plugin_error("PLUGIN_RUNTIME", "The plugin is still starting and could not be stopped yet."));
+            }
         }
+        self.stop_running_process(id)
+    }
+
+    fn stop_running_process(&self, id: &str) -> Result<()> {
         self.reap_dead()?;
         let runtime = self.running.lock().map_err(|_| plugin_error("PLUGIN_RUNTIME", "Plugin runtime state is unavailable."))?.remove(id);
         let Some(mut runtime) = runtime else { return Ok(()); };
@@ -349,7 +360,7 @@ impl PluginRuntime {
 
     pub fn stop_all(&self) {
         let ids = self.running.lock().ok().map(|running| running.keys().cloned().collect::<Vec<_>>()).unwrap_or_default();
-        for id in ids { let _ = self.stop(&id); }
+        for id in ids { let _ = self.stop_running_process(&id); }
     }
 
     pub fn shutdown(&self) {

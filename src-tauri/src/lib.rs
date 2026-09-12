@@ -18,27 +18,12 @@ use std::sync::{Arc, Mutex};
 use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
 type Backend = Arc<Mutex<store::Workspace>>;
-async fn work<T: Send + 'static>(
-    state: &State<'_, Backend>,
-    f: impl FnOnce(&store::Workspace) -> Result<T> + Send + 'static,
-) -> Result<T> {
+async fn work<T: Send + 'static>(state: &State<'_, Backend>, f: impl FnOnce(&store::Workspace) -> Result<T> + Send + 'static) -> Result<T> {
     let backend = Arc::clone(state.inner());
     tauri::async_runtime::spawn_blocking(move || {
-        let guard = backend.lock().map_err(|_| {
-            AppError::new(
-                "STORAGE_UNAVAILABLE",
-                "Storage stopped after an unexpected failure. Restart Tracefold to recover.",
-            )
-        })?;
+        let guard = backend.lock().map_err(|_| AppError::new("STORAGE_UNAVAILABLE", "Storage stopped after an unexpected failure. Restart Tracefold to recover."))?;
         f(&guard)
-    })
-    .await
-    .map_err(|_| {
-        AppError::new(
-            "STORAGE_UNAVAILABLE",
-            "The storage worker stopped unexpectedly.",
-        )
-    })?
+    }).await.map_err(|_| AppError::new("STORAGE_UNAVAILABLE", "The storage worker stopped unexpectedly."))?
 }
 #[tauri::command]
 async fn list_projects(state: State<'_, Backend>) -> Result<Vec<Project>> { work(&state, |s| s.list_projects()).await }
@@ -131,8 +116,6 @@ fn list_plugins(state: State<'_, PluginRuntime>) -> Result<Vec<PluginInfo>> { st
 #[tauri::command]
 fn pick_plugin_archive(app: tauri::AppHandle) -> Result<Vec<u8>> { plugin_manager::pick_plugin_archive(&app) }
 #[tauri::command]
-fn bundled_discovery_plugin() -> Vec<u8> { plugin_manager::bundled_discovery() }
-#[tauri::command]
 fn install_plugin_files(state: State<'_, PluginRuntime>, files: Vec<PluginFile>) -> Result<PluginInfo> { state.install_files(files) }
 #[tauri::command]
 fn set_plugin_enabled(state: State<'_, PluginRuntime>, id: String, enabled: bool) -> Result<()> { state.set_enabled(&id, enabled) }
@@ -175,7 +158,7 @@ pub fn run() {
             restore_record, get_revisions, get_settings, save_settings, import_asset, read_asset,
             capture_capabilities, capture_screen, save_file, create_backup, list_backups, restore_backup,
             export_backup_file, restore_backup_file, storage_info, import_project, list_plugins,
-            pick_plugin_archive, bundled_discovery_plugin, install_plugin_files, set_plugin_enabled,
+            pick_plugin_archive, install_plugin_files, set_plugin_enabled,
             remove_plugin, stop_plugin, launch_plugin
         ])
         .build(tauri::generate_context!())

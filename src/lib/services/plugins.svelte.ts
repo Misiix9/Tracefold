@@ -45,6 +45,7 @@ async function installArchive(archive: Uint8Array) {
   let unpackedBytes = 0;
   let aborted = false;
   let uploadChain = Promise.resolve();
+  const filePromises: Promise<void>[] = [];
 
   try {
     const unzip = new Unzip((file) => {
@@ -68,6 +69,7 @@ async function installArchive(archive: Uint8Array) {
         resolveFile = resolve;
         rejectFile = reject;
       });
+      filePromises.push(fileReady);
 
       file.ondata = (error, chunk, final) => {
         if (aborted) return;
@@ -109,10 +111,10 @@ async function installArchive(archive: Uint8Array) {
         }
       };
       file.start();
-      void fileReady;
     });
     unzip.register(AsyncUnzipInflate);
     unzip.push(archive, true);
+    await Promise.all(filePromises);
     await uploadChain;
     if (aborted || fileCount === 0) {
       throw new Error(fileCount === 0 ? t('The plugin package is empty.') : t('The plugin package exceeds the supported file or size limits.'));

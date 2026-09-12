@@ -56,8 +56,7 @@ async function installArchive(archive: Uint8Array) {
 
       fileCount += 1;
       if (fileCount > MAX_FILES) {
-        aborted = true;
-        return;
+        throw new Error(t('The plugin package contains too many files.'));
       }
 
       const chunks: Uint8Array[] = [];

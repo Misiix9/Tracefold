@@ -221,7 +221,7 @@ async fn launch_plugin(app: tauri::AppHandle, state: State<'_, Arc<PluginRuntime
     if let Err(error) = build {
         let runtime = Arc::clone(&runtime);
         let _ = plugin_blocking(move || runtime.stop(&id)).await;
-        return Err(AppError::new("PLUGIN_WINDOW", format!("Could not open plugin window: {error}")));
+        return Err(AppError::new("PLUGIN_WINDOW", &format!("Could not open plugin window: {error}")));
     }
     Ok(())
 }

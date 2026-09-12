@@ -13,11 +13,13 @@ mod tests;
 mod transport;
 use error::{AppError, Result};
 use model::*;
-use plugin_manager::{PluginFile, PluginInfo, PluginRuntime};
-use std::sync::{Arc, Mutex};
+use plugin_manager::{PluginInfo, PluginRuntime};
+use sha2::{Digest, Sha256};
+use std::sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex};
 use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
 type Backend = Arc<Mutex<store::Workspace>>;
+
 async fn work<T: Send + 'static>(state: &State<'_, Backend>, f: impl FnOnce(&store::Workspace) -> Result<T> + Send + 'static) -> Result<T> {
     let backend = Arc::clone(state.inner());
     tauri::async_runtime::spawn_blocking(move || {
@@ -25,6 +27,7 @@ async fn work<T: Send + 'static>(state: &State<'_, Backend>, f: impl FnOnce(&sto
         f(&guard)
     }).await.map_err(|_| AppError::new("STORAGE_UNAVAILABLE", "The storage worker stopped unexpectedly."))?
 }
+
 #[tauri::command]
 async fn list_projects(state: State<'_, Backend>) -> Result<Vec<Project>> { work(&state, |s| s.list_projects()).await }
 #[tauri::command]
@@ -111,34 +114,120 @@ async fn save_file(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> R
     }).await.map_err(|_| AppError::new("SAVE_FAILED", "The save operation could not finish."))?
 }
 
+fn plugin_window_label(id: &str) -> String {
+    let digest = Sha256::digest(id.as_bytes());
+    let hex = digest.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+    format!("plugin-{hex}")
+}
+
+fn close_plugin_window(app: &tauri::AppHandle, id: &str) {
+    let label = plugin_window_label(id);
+    if let Some(window) = app.get_webview_window(&label) { let _ = window.close(); }
+}
+
+fn close_all_plugin_windows(app: &tauri::AppHandle) {
+    for (label, window) in app.webview_windows() {
+        if label.starts_with("plugin-") { let _ = window.close(); }
+    }
+}
+
+async fn plugin_blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|_| AppError::new("PLUGIN_RUNTIME", "The plugin worker stopped unexpectedly."))?
+}
+
 #[tauri::command]
-fn list_plugins(state: State<'_, PluginRuntime>) -> Result<Vec<PluginInfo>> { state.list() }
+fn list_plugins(state: State<'_, Arc<PluginRuntime>>) -> Result<Vec<PluginInfo>> { state.list() }
+
 #[tauri::command]
-fn pick_plugin_archive(app: tauri::AppHandle) -> Result<Vec<u8>> { plugin_manager::pick_plugin_archive(&app) }
+async fn pick_plugin_archive(app: tauri::AppHandle) -> Result<tauri::ipc::Response> {
+    let bytes = plugin_blocking(move || plugin_manager::pick_plugin_archive(&app)).await?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 #[tauri::command]
-fn install_plugin_files(state: State<'_, PluginRuntime>, files: Vec<PluginFile>) -> Result<PluginInfo> { state.install_files(files) }
+async fn begin_plugin_install(state: State<'_, Arc<PluginRuntime>>) -> Result<String> {
+    let runtime = Arc::clone(state.inner());
+    plugin_blocking(move || runtime.begin_install()).await
+}
+
 #[tauri::command]
-fn set_plugin_enabled(state: State<'_, PluginRuntime>, id: String, enabled: bool) -> Result<()> { state.set_enabled(&id, enabled) }
+async fn append_plugin_file(state: State<'_, Arc<PluginRuntime>>, request: tauri::ipc::Request<'_>) -> Result<()> {
+    let install_id = transport::header(&request, "x-plugin-install-id")?;
+    let path = transport::header(&request, "x-plugin-path")?;
+    let bytes = transport::bytes(&request, 64 * 1024 * 1024)?;
+    let runtime = Arc::clone(state.inner());
+    plugin_blocking(move || runtime.append_install_file(&install_id, &path, bytes)).await
+}
+
 #[tauri::command]
-fn remove_plugin(state: State<'_, PluginRuntime>, id: String) -> Result<()> { state.remove(&id) }
+async fn finalize_plugin_install(app: tauri::AppHandle, state: State<'_, Arc<PluginRuntime>>, install_id: String) -> Result<PluginInfo> {
+    let runtime = Arc::clone(state.inner());
+    let info = plugin_blocking(move || runtime.finalize_install(&install_id)).await?;
+    close_plugin_window(&app, &info.id);
+    Ok(info)
+}
+
 #[tauri::command]
-fn stop_plugin(state: State<'_, PluginRuntime>, id: String) -> Result<()> { state.stop(&id) }
+async fn abort_plugin_install(state: State<'_, Arc<PluginRuntime>>, install_id: String) -> Result<()> {
+    let runtime = Arc::clone(state.inner());
+    plugin_blocking(move || runtime.abort_install(&install_id)).await
+}
+
 #[tauri::command]
-fn launch_plugin(app: tauri::AppHandle, state: State<'_, PluginRuntime>, id: String) -> Result<()> {
-    let url = state.start(&id)?;
-    let label = format!("plugin-{}", id.replace('.', "-"));
-    if app.get_webview_window(&label).is_some() { return Ok(()); }
+async fn set_plugin_enabled(app: tauri::AppHandle, state: State<'_, Arc<PluginRuntime>>, id: String, enabled: bool) -> Result<()> {
+    if !enabled { close_plugin_window(&app, &id); }
+    let runtime = Arc::clone(state.inner());
+    plugin_blocking(move || runtime.set_enabled(&id, enabled)).await
+}
+
+#[tauri::command]
+async fn remove_plugin(app: tauri::AppHandle, state: State<'_, Arc<PluginRuntime>>, id: String) -> Result<()> {
+    close_plugin_window(&app, &id);
+    let runtime = Arc::clone(state.inner());
+    plugin_blocking(move || runtime.remove(&id)).await
+}
+
+#[tauri::command]
+async fn stop_plugin(app: tauri::AppHandle, state: State<'_, Arc<PluginRuntime>>, id: String) -> Result<()> {
+    close_plugin_window(&app, &id);
+    let runtime = Arc::clone(state.inner());
+    plugin_blocking(move || runtime.stop(&id)).await
+}
+
+#[tauri::command]
+async fn launch_plugin(app: tauri::AppHandle, state: State<'_, Arc<PluginRuntime>>, id: String) -> Result<()> {
+    let label = plugin_window_label(&id);
+    let runtime = Arc::clone(state.inner());
+    let already_running = plugin_blocking({ let runtime = Arc::clone(&runtime); let id = id.clone(); move || runtime.is_running(&id) }).await?;
+    if already_running {
+        if let Some(window) = app.get_webview_window(&label) {
+            let _ = window.show();
+            let _ = window.set_focus();
+            return Ok(());
+        }
+    } else {
+        close_plugin_window(&app, &id);
+    }
+    let url = plugin_blocking({ let runtime = Arc::clone(&runtime); let id = id.clone(); move || runtime.start(&id) }).await?;
+    let title = plugin_blocking({ let runtime = Arc::clone(&runtime); let id = id.clone(); move || runtime.info(&id).map(|info| info.name) }).await?;
     let parsed = url.parse().map_err(|_| AppError::new("PLUGIN_RUNTIME", "Plugin URL is invalid."))?;
-    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::External(parsed))
-        .title(format!("{} · Tracefold", state.info_for_title(&id)?))
+    let build = tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::External(parsed))
+        .title(format!("{} · Tracefold", title))
         .inner_size(1280.0, 820.0)
         .min_inner_size(960.0, 620.0)
-        .build()
-        .map_err(|e| AppError::new("PLUGIN_WINDOW", format!("Could not open plugin window: {e}")))?;
+        .build();
+    if let Err(error) = build {
+        let runtime = Arc::clone(&runtime);
+        let _ = plugin_blocking(move || runtime.stop(&id)).await;
+        return Err(AppError::new("PLUGIN_WINDOW", format!("Could not open plugin window: {error}")));
+    }
     Ok(())
 }
 
 pub fn run() {
+    let exiting = Arc::new(AtomicBool::new(false));
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -149,7 +238,7 @@ pub fn run() {
             let language = workspace.get_settings()?.language;
             let plugins = PluginRuntime::open(root.join("plugins"))?;
             app.manage(Arc::new(Mutex::new(workspace)));
-            app.manage(plugins);
+            app.manage(Arc::new(plugins));
             menus::apply(app.handle(), &language)?;
             Ok(())
         })
@@ -158,20 +247,32 @@ pub fn run() {
             restore_record, get_revisions, get_settings, save_settings, import_asset, read_asset,
             capture_capabilities, capture_screen, save_file, create_backup, list_backups, restore_backup,
             export_backup_file, restore_backup_file, storage_info, import_project, list_plugins,
-            pick_plugin_archive, install_plugin_files, set_plugin_enabled,
-            remove_plugin, stop_plugin, launch_plugin
+            pick_plugin_archive, begin_plugin_install, append_plugin_file, finalize_plugin_install,
+            abort_plugin_install, set_plugin_enabled, remove_plugin, stop_plugin, launch_plugin
         ])
         .build(tauri::generate_context!())
         .expect("Tracefold could not start")
-        .run(|app, event| {
-            if let tauri::RunEvent::ExitRequested { code: None, api, .. } = event {
-                if let Some(window) = app.get_webview_window("main") {
-                    api.prevent_exit();
-                    let _ = window.close();
+        .run({
+            let exiting = Arc::clone(&exiting);
+            move |app, event| {
+                match event {
+                    tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::CloseRequested { api, .. }, .. } if label == "main" => {
+                        if !exiting.swap(true, Ordering::SeqCst) {
+                            api.prevent_close();
+                            app.state::<Arc<PluginRuntime>>().shutdown();
+                            close_all_plugin_windows(app);
+                            if let Some(window) = app.get_webview_window("main") { let _ = window.close(); }
+                        }
+                    }
+                    tauri::RunEvent::ExitRequested { .. } => {
+                        app.state::<Arc<PluginRuntime>>().shutdown();
+                        close_all_plugin_windows(app);
+                    }
+                    tauri::RunEvent::Exit => {
+                        app.state::<Arc<PluginRuntime>>().shutdown();
+                    }
+                    _ => {}
                 }
-            }
-            if let tauri::RunEvent::Exit = event {
-                app.state::<PluginRuntime>().stop_all();
             }
         });
 }

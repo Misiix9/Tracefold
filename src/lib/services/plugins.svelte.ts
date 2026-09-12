@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
-import { unzipSync } from 'fflate';
+import { AsyncUnzipInflate, Unzip } from 'fflate';
+import { errorText } from '../i18n/errors';
+import { t } from '../i18n/i18n.svelte';
 
 export type PluginInfo = {
   id: string;
@@ -15,34 +17,113 @@ export type PluginInfo = {
   url: string | null;
 };
 
-type PluginFile = { path: string; data: number[] };
+const MAX_ARCHIVE_BYTES = 256 * 1024 * 1024;
+const MAX_FILE_BYTES = 64 * 1024 * 1024;
+const MAX_TOTAL_UNPACKED_BYTES = 128 * 1024 * 1024;
+const MAX_FILES = 512;
 
-function bytes(value: unknown): Uint8Array {
-  if (value instanceof Uint8Array) return value;
-  if (Array.isArray(value)) return new Uint8Array(value as number[]);
-  if (value && typeof value === 'object') {
-    const values = Object.values(value as Record<string, number>);
-    if (values.every((item) => typeof item === 'number')) return new Uint8Array(values as number[]);
+function concatChunks(chunks: Uint8Array[], size: number) {
+  const output = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
   }
-  throw new Error('The plugin package returned invalid binary data.');
+  return output;
 }
 
-function readManifest(files: Record<string, Uint8Array>): void {
-  const manifest = files['manifest.json'];
-  if (!manifest) throw new Error('The plugin package has no root manifest.json.');
-  const parsed = JSON.parse(new TextDecoder().decode(manifest)) as { schema?: string; id?: string };
-  if (parsed.schema !== 'tracefold.plugin.v1' || !parsed.id) {
-    throw new Error('The plugin manifest is not a supported Tracefold plugin.');
-  }
+function isDirectoryEntry(path: string) {
+  return path.endsWith('/');
 }
 
-function unpack(input: Uint8Array): PluginFile[] {
-  const files = unzipSync(input);
-  const entries = Object.entries(files).filter(([path]) => !path.endsWith('/'));
-  const total = entries.reduce((sum, [, data]) => sum + data.byteLength, 0);
-  if (entries.length > 2000 || total > 256 * 1024 * 1024) throw new Error('Plugin package is too large.');
-  readManifest(Object.fromEntries(entries));
-  return entries.map(([path, data]) => ({ path, data: Array.from(data) }));
+async function installArchive(archive: Uint8Array) {
+  if (archive.byteLength === 0) return null;
+  if (archive.byteLength > MAX_ARCHIVE_BYTES) throw new Error(t('The plugin package exceeds the 256 MiB limit.'));
+
+  const installId = await invoke<string>('begin_plugin_install');
+  let fileCount = 0;
+  let unpackedBytes = 0;
+  let aborted = false;
+  let uploadChain = Promise.resolve();
+  const filePromises: Promise<void>[] = [];
+
+  try {
+    const unzip = new Unzip((file) => {
+      if (isDirectoryEntry(file.name)) {
+        file.start();
+        return;
+      }
+
+      fileCount += 1;
+      if (fileCount > MAX_FILES) {
+        throw new Error(t('The plugin package contains too many files.'));
+      }
+
+      const chunks: Uint8Array[] = [];
+      let fileBytes = 0;
+      let fileError: Error | null = null;
+      let resolveFile!: () => void;
+      let rejectFile!: (reason?: unknown) => void;
+      const fileReady = new Promise<void>((resolve, reject) => {
+        resolveFile = resolve;
+        rejectFile = reject;
+      });
+      filePromises.push(fileReady);
+
+      file.ondata = (error, chunk, final) => {
+        if (aborted) return;
+        if (error) {
+          fileError = error;
+          aborted = true;
+          rejectFile(error);
+          return;
+        }
+        fileBytes += chunk.byteLength;
+        unpackedBytes += chunk.byteLength;
+        if (fileBytes > MAX_FILE_BYTES) {
+          const limitError = new Error(t('A plugin file exceeds the 64 MiB limit.'));
+          fileError = limitError;
+          aborted = true;
+          rejectFile(limitError);
+          return;
+        }
+        if (unpackedBytes > MAX_TOTAL_UNPACKED_BYTES) {
+          const limitError = new Error(t('The unpacked plugin package exceeds the 128 MiB limit.'));
+          fileError = limitError;
+          aborted = true;
+          rejectFile(limitError);
+          return;
+        }
+        chunks.push(chunk.slice());
+        if (final) {
+          const data = concatChunks(chunks, fileBytes);
+          uploadChain = uploadChain.then(() => {
+            if (aborted || fileError) return;
+            return invoke<void>('append_plugin_file', data, {
+              headers: {
+                'x-plugin-install-id': installId,
+                'x-plugin-path': encodeURIComponent(file.name),
+              },
+            });
+          });
+          uploadChain.then(resolveFile, rejectFile);
+        }
+      };
+      file.start();
+    });
+    unzip.register(AsyncUnzipInflate);
+    unzip.push(archive, true);
+    await Promise.all(filePromises);
+    await uploadChain;
+    if (aborted || fileCount === 0) {
+      throw new Error(fileCount === 0 ? t('The plugin package is empty.') : t('The plugin package exceeds the supported file or size limits.'));
+    }
+    return await invoke<PluginInfo>('finalize_plugin_install', { installId });
+  } catch (error) {
+    aborted = true;
+    await invoke<void>('abort_plugin_install', { installId }).catch(() => undefined);
+    throw error;
+  }
 }
 
 export class PluginManager {
@@ -50,6 +131,16 @@ export class PluginManager {
   loading = $state(false);
   error = $state('');
   notification = $state('');
+  private busy = $state<Record<string, boolean>>({});
+
+  isBusy(id: string) {
+    return Boolean(this.busy[id]);
+  }
+
+  private setBusy(id: string, value: boolean) {
+    if (value) this.busy[id] = true;
+    else delete this.busy[id];
+  }
 
   async refresh() {
     this.loading = true;
@@ -57,7 +148,7 @@ export class PluginManager {
       this.plugins = await invoke<PluginInfo[]>('list_plugins');
       this.error = '';
     } catch (error) {
-      this.error = String(error);
+      this.error = errorText(error);
     } finally {
       this.loading = false;
     }
@@ -65,55 +156,80 @@ export class PluginManager {
 
   async installFromFilePicker() {
     this.loading = true;
+    this.error = '';
     try {
-      const archive = bytes(await invoke<unknown>('pick_plugin_archive'));
-      const files = unpack(archive);
-      const installed = await invoke<PluginInfo>('install_plugin_files', { files });
+      const archive = new Uint8Array(await invoke<ArrayBuffer>('pick_plugin_archive'));
+      if (archive.byteLength === 0) return;
+      const installed = await installArchive(archive);
+      if (installed) {
+        this.notification = t('{name} {version} installed.', { name: installed.name, version: installed.version });
+        window.setTimeout(() => (this.notification = ''), 3000);
+      }
       await this.refresh();
-      this.notification = `${installed.name} ${installed.version} installed.`;
-      window.setTimeout(() => (this.notification = ''), 3000);
     } catch (error) {
-      if (String(error).includes('CANCELLED')) return;
-      this.error = String(error);
+      this.error = errorText(error);
     } finally {
       this.loading = false;
     }
   }
 
   async setEnabled(plugin: PluginInfo, enabled: boolean) {
+    if (this.isBusy(plugin.id) || this.loading) return;
+    this.setBusy(plugin.id, true);
+    this.error = '';
     try {
-      await invoke('set_plugin_enabled', { id: plugin.id, enabled });
+      await invoke<void>('set_plugin_enabled', { id: plugin.id, enabled });
       await this.refresh();
     } catch (error) {
-      this.error = String(error);
+      this.error = errorText(error);
+    } finally {
+      this.setBusy(plugin.id, false);
     }
   }
 
   async open(plugin: PluginInfo) {
+    if (this.isBusy(plugin.id) || this.loading || !plugin.enabled) return;
+    this.setBusy(plugin.id, true);
+    this.error = '';
     try {
-      await invoke('launch_plugin', { id: plugin.id });
+      await invoke<void>('launch_plugin', { id: plugin.id });
       await this.refresh();
     } catch (error) {
-      this.error = String(error);
+      this.error = errorText(error);
+    } finally {
+      this.setBusy(plugin.id, false);
     }
   }
 
   async stop(plugin: PluginInfo) {
+    if (this.isBusy(plugin.id) || this.loading) return;
+    this.setBusy(plugin.id, true);
+    this.error = '';
     try {
-      await invoke('stop_plugin', { id: plugin.id });
+      await invoke<void>('stop_plugin', { id: plugin.id });
       await this.refresh();
     } catch (error) {
-      this.error = String(error);
+      this.error = errorText(error);
+    } finally {
+      this.setBusy(plugin.id, false);
     }
   }
 
   async remove(plugin: PluginInfo) {
-    if (!window.confirm(`Remove ${plugin.name}? Plugin data is kept separately and is not removed.`)) return;
+    if (this.isBusy(plugin.id) || this.loading) return;
+    const confirmed = window.confirm(t('Remove {name}? This stops the plugin and deletes its installed code. Persistent plugin data is kept.', { name: plugin.name }));
+    if (!confirmed) return;
+    this.setBusy(plugin.id, true);
+    this.error = '';
     try {
-      await invoke('remove_plugin', { id: plugin.id });
+      await invoke<void>('remove_plugin', { id: plugin.id });
       await this.refresh();
     } catch (error) {
-      this.error = String(error);
+      this.error = errorText(error);
+    } finally {
+      this.setBusy(plugin.id, false);
     }
   }
 }
+
+export const pluginManager = new PluginManager();

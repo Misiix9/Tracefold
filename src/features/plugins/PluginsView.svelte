@@ -1,109 +1,140 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { isTauri } from '@tauri-apps/api/core';
   import Icon from '../../lib/ui/Icon.svelte';
+  import { t } from '../../lib/i18n/i18n.svelte';
   import type { PluginManager } from '../../lib/services/plugins.svelte';
 
   let { manager }: { manager: PluginManager } = $props();
+  const desktop = isTauri();
+
+  const roadmap = [
+    'API Workbench',
+    'BOLA & authorization',
+    'Browser automation',
+    'API contracts',
+    'GraphQL & WebSocket',
+    'Security toolkit',
+    'Accessibility & performance',
+    'CI & reporting',
+    'Tracefold Assistant',
+  ];
 
   onMount(() => {
-    void manager.refresh();
+    if (desktop) void manager.refresh();
   });
 </script>
 
 <div class="plugins-view">
   <header class="hero">
     <div>
-      <p class="eyebrow">EXTENSIONS</p>
-      <h1>Plugins</h1>
-      <p class="intro">Extend Tracefold without turning the core into one giant application.</p>
+      <p class="eyebrow">{t('EXTENSIONS')}</p>
+      <h1>{t('Plugins')}</h1>
+      <p class="intro">{t('Extend Tracefold without turning the core into one giant application.')}</p>
     </div>
     <div class="actions">
-      <button class="button primary" disabled={manager.loading} onclick={() => void manager.installFromFilePicker()}>
-        <Icon name="upload" size={16} /> Install plugin package
+      <button class="button primary" disabled={!desktop || manager.loading} onclick={() => void manager.installFromFilePicker()}>
+        <Icon name="upload" size={16} /> {t('Install plugin package')}
       </button>
     </div>
   </header>
 
-  {#if manager.error}
-    <div class="error" role="alert">
-      <Icon name="warning" size={17} />
-      <span>{manager.error}</span>
-      <button class="icon-button" aria-label="Dismiss" onclick={() => (manager.error = '')}><Icon name="close" size={15} /></button>
-    </div>
-  {/if}
-  {#if manager.notification}<div class="notice" role="status"><Icon name="check" size={16} /> {manager.notification}</div>{/if}
-
-  <section class="section">
-    <div class="section-head">
+  {#if !desktop}
+    <section class="section safety browser-only">
+      <div><Icon name="monitor" size={22} /></div>
       <div>
-        <h2>Installed</h2>
-        <p>{manager.plugins.length} installed plugin{manager.plugins.length === 1 ? '' : 's'}.</p>
+        <h2>{t('Desktop-only plugin runtime')}</h2>
+        <p>{t('Plugins require the Tracefold desktop app because they run as trusted local processes and open native plugin windows.')}</p>
+        <p>{t('Browser preview keeps plugin commands disabled so it never attempts to call native-only APIs.')}</p>
       </div>
-    </div>
-
-    {#if !manager.plugins.length && !manager.loading}
-      <div class="empty">
-        <Icon name="files" size={30} />
-        <h3>No plugins installed</h3>
-        <p>Install a signed or locally reviewed Tracefold plugin package to extend the workspace.</p>
-      </div>
-    {:else}
-      <div class="grid">
-        {#each manager.plugins as plugin}
-          <article class="card">
-            <div class="card-top">
-              <div class="plugin-icon"><Icon name="code" size={22} /></div>
-              <div class="title-wrap"><h3>{plugin.name}</h3><span>v{plugin.version}</span></div>
-              <span class:running={plugin.running} class="status">{plugin.running ? 'Running' : plugin.enabled ? 'Enabled' : 'Disabled'}</span>
-            </div>
-            <p class="description">{plugin.description || 'No description provided.'}</p>
-            <div class="meta">
-              <span>{plugin.publisher}</span>
-              <span>API {plugin.apiVersion}</span>
-            </div>
-            {#if plugin.capabilities.length}
-              <div class="caps">
-                {#each plugin.capabilities as capability}<span>{capability}</span>{/each}
-              </div>
-            {/if}
-            <div class="card-actions">
-              {#if plugin.enabled}
-                <button class="button primary" disabled={manager.loading} onclick={() => void manager.open(plugin)}>
-                  <Icon name="arrow" size={15} /> Open
-                </button>
-                {#if plugin.running}<button class="button" disabled={manager.loading} onclick={() => void manager.stop(plugin)}>Stop</button>{/if}
-              {/if}
-              <button class="button" disabled={manager.loading} onclick={() => void manager.setEnabled(plugin, !plugin.enabled)}>
-                {plugin.enabled ? 'Disable' : 'Enable'}
-              </button>
-              <button class="icon-button danger" disabled={manager.loading} aria-label={`Remove ${plugin.name}`} onclick={() => void manager.remove(plugin)}>
-                <Icon name="trash" size={16} />
-              </button>
-            </div>
-          </article>
-        {/each}
+    </section>
+  {:else}
+    {#if manager.error}
+      <div class="error" role="alert">
+        <Icon name="warning" size={17} />
+        <span>{manager.error}</span>
+        <button class="icon-button" aria-label={t('Dismiss')} onclick={() => (manager.error = '')}><Icon name="close" size={15} /></button>
       </div>
     {/if}
-  </section>
+    {#if manager.notification}<div class="notice" role="status"><Icon name="check" size={16} /> {manager.notification}</div>{/if}
 
-  <section class="section roadmap">
-    <div class="section-head">
-      <div>
-        <h2>Plugin roadmap</h2>
-        <p>Only real packages appear as installable plugins. Planned tools stay clearly marked.</p>
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>{t('Installed')}</h2>
+          <p>{t(manager.plugins.length === 1 ? '{count} installed plugin.' : '{count} installed plugins.', { count: manager.plugins.length })}</p>
+        </div>
       </div>
-    </div>
-    <div class="roadmap-grid">
-      {#each ['API Workbench', 'BOLA & authorization', 'Browser automation', 'API contracts', 'GraphQL & WebSocket', 'Security toolkit', 'Accessibility & performance', 'CI & reporting', 'Tracefold Assistant'] as item}
-        <div class="roadmap-item"><Icon name="clock" size={15} />{item}<span>Planned</span></div>
-      {/each}
-    </div>
-  </section>
 
-  <section class="section safety">
-    <div><Icon name="shield" size={22} /></div>
-    <div><h2>Plugin safety</h2><p>Plugins run outside Tracefold's core workspace and communicate through a loopback web runtime.</p><p>Capabilities are declared and shown before use. The host does not give plugins direct SQLite, project-file, or secret-store access.</p></div>
-  </section>
+      {#if !manager.plugins.length && !manager.loading}
+        <div class="empty">
+          <Icon name="files" size={30} />
+          <h3>{t('No plugins installed')}</h3>
+          <p>{t('Install a verified or locally reviewed Tracefold plugin package to extend the workspace.')}</p>
+        </div>
+      {:else}
+        <div class="grid">
+          {#each manager.plugins as plugin}
+            <article class="card">
+              <div class="card-top">
+                <div class="plugin-icon"><Icon name="code" size={22} /></div>
+                <div class="title-wrap"><h3>{plugin.name}</h3><span>v{plugin.version}</span></div>
+                <span class:running={plugin.running} class="status">{plugin.running ? t('Running') : plugin.enabled ? t('Enabled') : t('Disabled')}</span>
+              </div>
+              <p class="description">{plugin.description || t('No description provided.')}</p>
+              <div class="meta">
+                <span>{plugin.publisher}</span>
+                <span>{t('API {version}', { version: plugin.apiVersion })}</span>
+              </div>
+              {#if plugin.capabilities.length}
+                <div class="caps">
+                  {#each plugin.capabilities as capability}<span>{capability}</span>{/each}
+                </div>
+              {/if}
+              <div class="card-actions">
+                {#if plugin.enabled}
+                  <button class="button primary" disabled={manager.loading || manager.isBusy(plugin.id)} onclick={() => void manager.open(plugin)}>
+                    <Icon name="arrow" size={15} /> {t('Open')}
+                  </button>
+                  {#if plugin.running}<button class="button" disabled={manager.loading || manager.isBusy(plugin.id)} onclick={() => void manager.stop(plugin)}>{t('Stop')}</button>{/if}
+                {/if}
+                <button class="button" disabled={manager.loading || manager.isBusy(plugin.id)} onclick={() => void manager.setEnabled(plugin, !plugin.enabled)}>
+                  {plugin.enabled ? t('Disable') : t('Enable')}
+                </button>
+                <button class="icon-button danger" disabled={manager.loading || manager.isBusy(plugin.id)} aria-label={t('Remove {name}', { name: plugin.name })} onclick={() => void manager.remove(plugin)}>
+                  <Icon name="trash" size={16} />
+                </button>
+              </div>
+            </article>
+          {/each}
+        </div>
+      {/if}
+    </section>
+
+    <section class="section roadmap">
+      <div class="section-head">
+        <div>
+          <h2>{t('Plugin roadmap')}</h2>
+          <p>{t('Only real packages appear as installable plugins. Planned tools stay clearly marked.')}</p>
+        </div>
+      </div>
+      <div class="roadmap-grid">
+        {#each roadmap as item}
+          <div class="roadmap-item"><Icon name="clock" size={15} />{t(item)}<span>{t('Planned')}</span></div>
+        {/each}
+      </div>
+    </section>
+
+    <section class="section safety">
+      <div><Icon name="shield" size={22} /></div>
+      <div>
+        <h2>{t('Plugin safety')}</h2>
+        <p>{t('Plugins are trusted local code. They run as your OS user and are not sandboxed by Tracefold.')}</p>
+        <p>{t('The host keeps plugin web runtimes on 127.0.0.1, stores plugin data outside installed code, and validates package paths and size limits.')}</p>
+        <p>{t('Capabilities are declared for transparency, but this beta does not enforce them as an OS permission boundary.')}</p>
+      </div>
+    </section>
+  {/if}
 </div>
 
 <style>
@@ -145,5 +176,6 @@
   .safety { display:flex; gap:14px; border-top:1px solid var(--line); padding-top:24px; color:var(--muted); }
   .safety h2 { color:var(--text); margin-bottom:6px; }
   .safety p { margin:4px 0; font-size:12px; line-height:1.5; }
+  .browser-only { border:1px solid var(--line); border-radius:var(--radius); padding:18px; }
   @media(max-width:760px){.plugins-view{padding:24px 18px}.hero{align-items:flex-start;flex-direction:column}.actions{width:100%}}
 </style>

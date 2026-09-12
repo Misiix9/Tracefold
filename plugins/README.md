@@ -1,6 +1,8 @@
 # Tracefold Plugins
 
-Tracefold uses isolated loopback-web plugins for specialist tools.
+Tracefold uses loopback-web plugins for specialist tools. In the 0.2 beta, plugins are **trusted local code**, not sandboxed processes. They run with the same OS-user privileges as Tracefold, so only install packages you trust.
+
+The host still validates plugin IDs, package paths, package limits, manifest compatibility, loopback declarations, health checks, process lifecycle, and atomic replacement behavior. Declared capabilities are currently metadata for transparency, not OS-level permission enforcement.
 
 ## First plugin
 

@@ -18,14 +18,9 @@
       <p class="intro">Extend Tracefold without turning the core into one giant application.</p>
     </div>
     <div class="actions">
-      <button class="button" disabled={manager.loading} onclick={() => void manager.installFromFilePicker()}>
-        <Icon name="upload" size={16} /> Install package
+      <button class="button primary" disabled={manager.loading} onclick={() => void manager.installFromFilePicker()}>
+        <Icon name="upload" size={16} /> Install plugin package
       </button>
-      {#if !manager.plugins.some((plugin) => plugin.id === 'tracefold.discovery')}
-        <button class="button primary" disabled={manager.loading} onclick={() => void manager.installBundledDiscovery()}>
-          <Icon name="download" size={16} /> Install Discovery
-        </button>
-      {/if}
     </div>
   </header>
 

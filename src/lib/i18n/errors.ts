@@ -28,6 +28,13 @@ const messages: Record<string, string> = {
   UNSUPPORTED_SCHEMA: 'This project uses an unsupported format version.',
   ASSET_NOT_FOUND: 'A required evidence file is missing.',
   STALE_CURSOR: 'Search results changed. Search again to refresh them.',
+  CANCELLED: 'The operation was cancelled.',
+  PLUGIN_INPUT: 'The plugin package could not be read safely.',
+  PLUGIN_INVALID: 'The plugin package or manifest is invalid.',
+  PLUGIN_STORAGE: 'Tracefold could not update plugin storage.',
+  PLUGIN_RUNTIME: 'The plugin runtime could not start or stop safely.',
+  PLUGIN_DISABLED: 'The plugin is disabled. Enable it before opening it.',
+  PLUGIN_WINDOW: 'Tracefold could not open the plugin window.',
 };
 /** Technical diagnostics are retained when an exact translation is unavailable. */
 export function errorText(error: unknown): string {

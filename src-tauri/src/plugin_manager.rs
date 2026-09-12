@@ -561,7 +561,8 @@ fn health_check(port: u16, health: &str) -> bool {
     if stream.write_all(request.as_bytes()).is_err() { return false; }
     let mut buffer = [0u8; 4096];
     let Ok(size) = stream.read(&mut buffer) else { return false; };
-    let first_line = String::from_utf8_lossy(&buffer[..size]).lines().next().unwrap_or("");
+    let response = String::from_utf8_lossy(&buffer[..size]);
+    let first_line = response.lines().next().unwrap_or("");
     let mut parts = first_line.split_whitespace();
     let _version = parts.next();
     matches!(parts.next().and_then(|value| value.parse::<u16>().ok()), Some(200..=299))

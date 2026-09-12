@@ -10,7 +10,7 @@ The installable package is built from the Discovery project and validated agains
 
 SHA-256:
 
-`78728b06d075842fda70a2cb0155db541843906b83bd5f0892d2376bd38bdfe9`
+`f46deb1896fc243a6fba337be2cf6fc2e30bddfbc92a8790640c8117c864dc54`
 
 Install it from Tracefold's **Plugins** page with **Install plugin package**.
 

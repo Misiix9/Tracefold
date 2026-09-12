@@ -80,9 +80,9 @@ The simplest development workflow is:
 
 ## Discovery plugin
 
-`tracefold.discovery` is the first bundled plugin. It provides authenticated browser discovery, API mapping, route-shape deduplication, multi-user endpoint testing, and detailed exports.
+`tracefold.discovery` is the first real plugin package. It provides authenticated browser discovery, API mapping, route-shape deduplication, multi-user endpoint testing, and detailed exports.
 
-Its settings and accounts live outside the plugin package. Updating the plugin therefore does not erase user data.
+Its settings and accounts live outside the plugin code directory. Updating the plugin therefore does not erase user data.
 
 ## Future SDK work
 

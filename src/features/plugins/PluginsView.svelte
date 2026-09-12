@@ -102,7 +102,7 @@
 
   <section class="section safety">
     <div><Icon name="shield" size={22} /></div>
-    <div><h2>Plugin safety</h2><p>Plugins run outside Tracefold's core workspace. Capabilities are declared in their manifest.</p><p>Tracefold never gives a plugin direct SQLite, project-file, or secret-store access.</p></div>
+    <div><h2>Plugin safety</h2><p>Plugins run outside Tracefold's core workspace and communicate through a loopback web runtime.</p><p>Capabilities are declared and shown before use. The host does not give plugins direct SQLite, project-file, or secret-store access.</p></div>
   </section>
 </div>
 

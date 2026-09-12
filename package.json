@@ -1,9 +1,9 @@
 {
   "name": "tracefold",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "A thoughtful, offline testing companion",
+  "description": "Offline testing companion with an isolated plugin platform",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
@@ -48,7 +48,6 @@
     "prettier": "3.9.6",
     "prettier-plugin-svelte": "4.1.1",
     "svelte-check": "^4.0.0",
-    "typescript": "^5.9.0",
     "vite": "^7.0.0",
     "vitest": "^3.0.0"
   }

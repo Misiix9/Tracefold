@@ -1,0 +1,33 @@
+{
+  "schema": "tracefold.plugin.v1",
+  "id": "tracefold.discovery",
+  "name": "Tracefold Discovery",
+  "version": "2.1.1",
+  "publisher": "Tracefold",
+  "description": "Authenticated website and API discovery with multi-user authorization testing.",
+  "apiVersion": 1,
+  "minTracefoldVersion": "0.2.0",
+  "runtime": {
+    "type": "loopback-web",
+    "entry": "run.py",
+    "command": "python",
+    "args": ["run.py", "--port", "{port}"],
+    "health": "/api/health",
+    "bind": "127.0.0.1"
+  },
+  "capabilities": [
+    "network.targeted-http",
+    "browser.playwright",
+    "local.encrypted-secrets",
+    "local.files.app-data"
+  ],
+  "dataPolicy": {
+    "persistentDirectory": ".tracefold",
+    "telemetry": false,
+    "accountRequired": false
+  },
+  "updates": {
+    "channel": "stable",
+    "artifact": "tracefold-discovery"
+  }
+}

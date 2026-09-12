@@ -12,6 +12,7 @@
   import { Workspace } from './lib/services/workspace.svelte';
   import { BrowserRepository } from './lib/services/browser-repository';
   import { NativeRepository } from './lib/services/native-repository';
+  import { PluginManager } from './lib/services/plugins.svelte';
   import Icon from './lib/ui/Icon.svelte';
   import Modal from './lib/ui/Modal.svelte';
   import EmptyState from './lib/ui/EmptyState.svelte';
@@ -23,10 +24,12 @@
   import RevisionHistory from './features/settings/RevisionHistory.svelte';
   import ReportsView from './features/reports/ReportsView.svelte';
   import TemplatesView from './features/templates/TemplatesView.svelte';
+  import PluginsView from './features/plugins/PluginsView.svelte';
   import type { AnyEntity } from './lib/domain/types';
   import { plainText } from './lib/domain/defaults';
   import { captureEvidence, importEvidence } from './features/evidence/evidence';
   const workspace = new Workspace(isTauri() ? new NativeRepository() : new BrowserRepository());
+  const plugins = new PluginManager();
   const updater = new AppUpdater({
     check: () => check({ timeout: 15000 }),
     prepare: async () => {
@@ -64,6 +67,7 @@
     { id: 'evidence', label: t('Evidence'), icon: 'evidence', kinds: ['evidence'] },
     { id: 'templates', label: t('Templates'), icon: 'template', kinds: ['template'] },
     { id: 'reports', label: t('Reports'), icon: 'reports', kinds: [] },
+    { id: 'plugins', label: t('Plugins'), icon: 'code', kinds: [] },
   ]);
   const current = $derived(navigation.find((n) => n.id === workspace.view)?.label ?? t('Settings'));
   const searchResults = new WorkspaceSearch(workspace.repo, () => workspace.flush());
@@ -324,6 +328,7 @@
         {:else if workspace.view === 'evidence'}<EvidenceView {workspace} />
         {:else if workspace.view === 'templates'}<TemplatesView {workspace} />
         {:else if workspace.view === 'reports'}<ReportsView {workspace} />
+        {:else if workspace.view === 'plugins'}<PluginsView manager={plugins} />
         {:else}<SettingsView {workspace} {updater} />{/if}
       {/key}
     </main>

@@ -27,24 +27,20 @@ function bytes(value: unknown): Uint8Array {
   throw new Error('The plugin package returned invalid binary data.');
 }
 
-function readManifest(files: Record<string, Uint8Array>): { id: string } {
+function readManifest(files: Record<string, Uint8Array>): void {
   const manifest = files['manifest.json'];
   if (!manifest) throw new Error('The plugin package has no root manifest.json.');
-  const text = new TextDecoder().decode(manifest);
-  const parsed = JSON.parse(text) as { schema?: string; id?: string };
+  const parsed = JSON.parse(new TextDecoder().decode(manifest)) as { schema?: string; id?: string };
   if (parsed.schema !== 'tracefold.plugin.v1' || !parsed.id) {
     throw new Error('The plugin manifest is not a supported Tracefold plugin.');
   }
-  return { id: parsed.id };
 }
 
 function unpack(input: Uint8Array): PluginFile[] {
   const files = unzipSync(input);
   const entries = Object.entries(files).filter(([path]) => !path.endsWith('/'));
   const total = entries.reduce((sum, [, data]) => sum + data.byteLength, 0);
-  if (entries.length > 2000 || total > 256 * 1024 * 1024) {
-    throw new Error('Plugin package is too large.');
-  }
+  if (entries.length > 2000 || total > 256 * 1024 * 1024) throw new Error('Plugin package is too large.');
   readManifest(Object.fromEntries(entries));
   return entries.map(([path, data]) => ({ path, data: Array.from(data) }));
 }
@@ -78,22 +74,6 @@ export class PluginManager {
       window.setTimeout(() => (this.notification = ''), 3000);
     } catch (error) {
       if (String(error).includes('CANCELLED')) return;
-      this.error = String(error);
-    } finally {
-      this.loading = false;
-    }
-  }
-
-  async installBundledDiscovery() {
-    this.loading = true;
-    try {
-      const archive = bytes(await invoke<unknown>('bundled_discovery_plugin'));
-      const files = unpack(archive);
-      await invoke<PluginInfo>('install_plugin_files', { files });
-      await this.refresh();
-      this.notification = 'Tracefold Discovery is installed.';
-      window.setTimeout(() => (this.notification = ''), 3000);
-    } catch (error) {
       this.error = String(error);
     } finally {
       this.loading = false;

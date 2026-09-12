@@ -691,7 +691,7 @@ mod tests {
 
     #[test]
     fn installation_rejects_traversal_and_duplicates() {
-        let runtime = PluginRuntime::open(tempdir().unwrap().keep().unwrap()).unwrap();
+        let runtime = PluginRuntime::open(tempdir().unwrap().keep()).unwrap();
         let install = runtime.begin_install().unwrap();
         assert!(runtime.append_install_file(&install, "../evil.txt", b"x".to_vec()).is_err());
         runtime.append_install_file(&install, "manifest.json", serde_json::to_vec(&manifest("example.plugin")).unwrap()).unwrap();
@@ -701,7 +701,7 @@ mod tests {
 
     #[test]
     fn package_file_limit_is_enforced_before_write() {
-        let runtime = PluginRuntime::open(tempdir().unwrap().keep().unwrap()).unwrap();
+        let runtime = PluginRuntime::open(tempdir().unwrap().keep()).unwrap();
         let install = runtime.begin_install().unwrap();
         let data = vec![0u8; MAX_FILE_BYTES];
         runtime.append_install_file(&install, "large.bin", data).unwrap();

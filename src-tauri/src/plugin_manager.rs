@@ -312,10 +312,6 @@ pub fn pick_plugin_archive(app: &AppHandle) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-pub fn bundled_discovery() -> Vec<u8> {
-    include_bytes!("../../plugins/tracefold-discovery/Tracefold-Discovery-v2.1.1.zip").to_vec()
-}
-
 #[cfg(test)]
 mod tests {
     use super::safe_relative_path;

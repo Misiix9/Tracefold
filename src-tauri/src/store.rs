@@ -501,6 +501,10 @@ impl Workspace {
             || !["A4", "LETTER"].contains(&settings.page_size.as_str())
             || settings.author.len() > 500
             || settings.last_view.len() > 100
+            || !(crate::model::MIN_CHECK_SECONDS..=crate::model::MAX_CHECK_SECONDS)
+                .contains(&settings.update_check_seconds)
+            || !(crate::model::MIN_CHECK_SECONDS..=crate::model::MAX_CHECK_SECONDS)
+                .contains(&settings.plugin_check_seconds)
             || settings.shortcuts.len() > 100
             || settings
                 .shortcuts

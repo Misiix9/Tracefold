@@ -114,6 +114,37 @@ const pluginMessages: Readonly<Record<string, string>> = {
   'Refresh the plugin catalog before installing.':
     'Telepítés előtt frissítsd a bővítménykatalógust.',
   'Preparing update…': 'Frissítés előkészítése…',
+  'Install updates automatically': 'Frissítések automatikus telepítése',
+  'A new version installs when you next open Tracefold. While you are working, Tracefold asks before restarting.':
+    'Az új verzió a Tracefold következő megnyitásakor települ. Munka közben a Tracefold rákérdez az újraindításra.',
+  'Keep plugins up to date automatically': 'Bővítmények automatikus frissítése',
+  'Check for updates': 'Frissítések keresése',
+  'Every minute': 'Percenként',
+  'Every 5 minutes': '5 percenként',
+  'Every 15 minutes': '15 percenként',
+  'Every hour': 'Óránként',
+  'Once a day': 'Naponta egyszer',
+  'A check that finds nothing new costs almost nothing: Tracefold asks only whether the release feed changed.':
+    'Az ellenőrzés szinte semmibe nem kerül, ha nincs újdonság: a Tracefold csak azt kérdezi meg, változott-e a kiadási forrás.',
+  'Updating Tracefold': 'A Tracefold frissítése',
+  'Downloading the new version': 'Az új verzió letöltése',
+  'Saving your work and backing up projects': 'A munka mentése és a projektek biztonsági mentése',
+  Installing: 'Telepítés',
+  'Restarting Tracefold': 'A Tracefold újraindítása',
+  'Tracefold reopens on its own when this finishes.':
+    'A Tracefold magától újranyílik, amint ez befejeződik.',
+  'Update ready': 'A frissítés készen áll',
+  'Tracefold {version} has been downloaded and installs when you restart.':
+    'A Tracefold {version} letöltve, és újraindításkor települ.',
+  'Your work is saved and every project is backed up before it installs.':
+    'A telepítés előtt a munkád mentésre kerül, és minden projektről biztonsági mentés készül.',
+  Later: 'Később',
+  'Restart now': 'Újraindítás most',
+  'Version {version} is available.': 'Elérhető a(z) {version} verzió.',
+  'Stop the plugin to update it.': 'A frissítéshez állítsd le a bővítményt.',
+  'Updating…': 'Frissítés…',
+  '{name} was updated.': '{name} frissítve.',
+  '{count} plugins were updated.': '{count} bővítmény frissítve.',
   'Restart to update': 'Újraindítás a frissítéshez',
   'Version {version} is ready and installs when you restart.':
     'A(z) {version} verzió készen áll, és újraindításkor települ.',

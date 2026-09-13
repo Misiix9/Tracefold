@@ -186,3 +186,89 @@ describe('plugin manager', () => {
     expect(manager.updatable.map((value) => value.id)).toEqual(['a.one']);
   });
 });
+
+describe('plugin updates', () => {
+  it('surfaces a per-plugin update once the catalog is loaded', async () => {
+    const manager = new PluginManager();
+    invoke.mockResolvedValueOnce([plugin({ version: '2.0.0' })]);
+    await manager.refresh();
+    // Without a catalog there is nothing to compare against.
+    expect(manager.updateFor(manager.plugins[0])).toBeUndefined();
+
+    invoke.mockResolvedValueOnce({
+      source: 's',
+      updated: '',
+      entries: [entry({ installedVersion: '2.0.0', updateAvailable: true })],
+    });
+    await manager.refreshCatalog();
+    expect(manager.updateFor(manager.plugins[0])?.latest?.version).toBe('2.1.0');
+  });
+
+  it('updates plugins automatically only when that is switched on', async () => {
+    const manager = new PluginManager();
+    invoke.mockResolvedValueOnce([plugin({ version: '2.0.0' })]);
+    invoke.mockResolvedValueOnce({
+      source: 's',
+      updated: '',
+      entries: [entry({ installedVersion: '2.0.0', updateAvailable: true })],
+    });
+    await manager.checkForUpdates();
+    expect(invoke).not.toHaveBeenCalledWith('install_catalog_plugin', expect.anything());
+
+    // The plugin list is already loaded, so this pass only refreshes the catalog.
+    manager.configure({ autoUpdatePlugins: true });
+    invoke.mockResolvedValueOnce({
+      source: 's',
+      updated: '',
+      entries: [entry({ installedVersion: '2.0.0', updateAvailable: true })],
+    });
+    invoke.mockResolvedValueOnce(plugin({ version: '2.1.0' }));
+    invoke.mockResolvedValueOnce([plugin({ version: '2.1.0' })]);
+    await manager.checkForUpdates();
+
+    const install = invoke.mock.calls.find(([command]) => command === 'install_catalog_plugin');
+    expect(install?.[1]).toEqual({ id: 'tracefold.discovery', version: '2.1.0' });
+    expect(manager.autoUpdated).toEqual(['Tracefold Discovery 2.1.0']);
+  });
+
+  it('never replaces a plugin that is running or open', async () => {
+    const manager = new PluginManager();
+    manager.configure({ autoUpdatePlugins: true });
+    invoke.mockResolvedValueOnce([plugin({ version: '2.0.0', running: true })]);
+    invoke.mockResolvedValueOnce({
+      source: 's',
+      updated: '',
+      entries: [entry({ installedVersion: '2.0.0', updateAvailable: true })],
+    });
+    await manager.checkForUpdates();
+    // Swapping code out from under a running plugin would stop it mid-task.
+    expect(invoke).not.toHaveBeenCalledWith('install_catalog_plugin', expect.anything());
+  });
+
+  it('does nothing when no plugins are installed', async () => {
+    const manager = new PluginManager();
+    manager.configure({ autoUpdatePlugins: true });
+    invoke.mockResolvedValueOnce([]);
+    await manager.checkForUpdates();
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).not.toHaveBeenCalledWith('fetch_plugin_catalog');
+  });
+
+  it('stops its scheduler when disposed', async () => {
+    vi.useFakeTimers();
+    try {
+      const manager = new PluginManager();
+      invoke.mockResolvedValue([]);
+      const stop = manager.startAutomaticChecks();
+      await vi.advanceTimersByTimeAsync(12_000);
+      const after = invoke.mock.calls.length;
+      expect(after).toBeGreaterThan(0);
+
+      stop();
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+      expect(invoke.mock.calls.length).toBe(after);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

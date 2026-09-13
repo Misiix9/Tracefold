@@ -12,6 +12,7 @@ mod store;
 #[cfg(test)]
 mod tests;
 mod transport;
+mod updates;
 use catalog::CatalogService;
 use error::{AppError, Result};
 use model::*;
@@ -163,6 +164,12 @@ async fn install_plugin_from_file(app: tauri::AppHandle, state: State<'_, Arc<Pl
     Ok(installed)
 }
 
+/// A cheap conditional probe. The full check only runs when this says the feed moved.
+#[tauri::command]
+async fn update_feed_changed(state: State<'_, Arc<updates::FeedWatcher>>) -> Result<bool> {
+    state.changed().await
+}
+
 #[tauri::command]
 async fn fetch_plugin_catalog(state: State<'_, Arc<CatalogService>>) -> Result<catalog::CatalogResult> {
     state.fetch().await
@@ -248,6 +255,7 @@ pub fn run() {
             let plugins = Arc::new(PluginRuntime::open(plugin_root.clone())?);
             app.manage(Arc::new(Mutex::new(workspace)));
             app.manage(Arc::new(CatalogService::new(Arc::clone(&plugins), plugin_root)));
+            app.manage(Arc::new(updates::FeedWatcher::new()));
             app.manage(plugins);
             menus::apply(app.handle(), &language)?;
             Ok(())
@@ -257,7 +265,7 @@ pub fn run() {
             restore_record, get_revisions, get_settings, save_settings, import_asset, read_asset,
             capture_capabilities, capture_screen, save_file, create_backup, list_backups, restore_backup,
             export_backup_file, restore_backup_file, storage_info, import_project, list_plugins,
-            install_plugin_from_file, fetch_plugin_catalog, install_catalog_plugin,
+            install_plugin_from_file, fetch_plugin_catalog, install_catalog_plugin, update_feed_changed,
             set_plugin_enabled, remove_plugin, stop_plugin, start_plugin, launch_plugin
         ])
         .build(tauri::generate_context!())

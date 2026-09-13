@@ -3,7 +3,20 @@
   import { onMount } from 'svelte';
   import { getVersion } from '@tauri-apps/api/app';
   import type { AppUpdater } from '../../lib/services/updater.svelte';
-  let { updater }: { updater: AppUpdater } = $props();
+  import type { Workspace } from '../../lib/services/workspace.svelte';
+  let { updater, workspace }: { updater: AppUpdater; workspace: Workspace } = $props();
+
+  const intervals = [
+    { seconds: 60, label: 'Every minute' },
+    { seconds: 300, label: 'Every 5 minutes' },
+    { seconds: 900, label: 'Every 15 minutes' },
+    { seconds: 3600, label: 'Every hour' },
+    { seconds: 86400, label: 'Once a day' },
+  ];
+
+  function save(patch: Parameters<Workspace['setSettings']>[0]) {
+    workspace.setSettings(patch).catch((error) => workspace.fail(error));
+  }
   let installedVersion = $state('');
   let versionFailed = $state(false);
   onMount(() => {
@@ -48,6 +61,46 @@
       </p>{:else if updater.readyToRestart}<p class="muted small" role="status">
         {t('The update is downloaded and installs when you restart Tracefold.')}
       </p>{/if}
+    <label class="check-row">
+      <input
+        type="checkbox"
+        checked={workspace.settings.autoUpdate}
+        onchange={(e) => save({ autoUpdate: e.currentTarget.checked })}
+      />
+      {t('Install updates automatically')}
+    </label>
+    <p class="muted small">
+      {t(
+        'A new version installs when you next open Tracefold. While you are working, Tracefold asks before restarting.',
+      )}
+    </p>
+
+    <label class="check-row">
+      <input
+        type="checkbox"
+        checked={workspace.settings.autoUpdatePlugins}
+        onchange={(e) => save({ autoUpdatePlugins: e.currentTarget.checked })}
+      />
+      {t('Keep plugins up to date automatically')}
+    </label>
+
+    <label class="interval">
+      <span>{t('Check for updates')}</span>
+      <select
+        value={workspace.settings.updateCheckSeconds}
+        onchange={(e) => save({ updateCheckSeconds: Number(e.currentTarget.value) })}
+      >
+        {#each intervals as option}
+          <option value={option.seconds}>{t(option.label)}</option>
+        {/each}
+      </select>
+    </label>
+    <p class="muted small">
+      {t(
+        'A check that finds nothing new costs almost nothing: Tracefold asks only whether the release feed changed.',
+      )}
+    </p>
+
     <button
       class="button"
       disabled={updater.checking || updater.busy || updater.prefetching}
@@ -107,6 +160,30 @@
     background: var(--recessed);
     font-size: 12px;
     color: var(--muted);
+  }
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 10px 0 2px;
+    font-size: 13px;
+  }
+  .interval {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 14px 0 2px;
+    font-size: 13px;
+  }
+  .interval select {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 7px 9px;
+    font: inherit;
+    font-size: 12px;
+    background: var(--surface);
+    color: var(--text);
   }
   .version-badge strong {
     color: var(--text);

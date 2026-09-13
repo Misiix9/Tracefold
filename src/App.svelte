@@ -4,9 +4,10 @@
   import { onMount } from 'svelte';
   import { AppUpdater } from './lib/services/updater.svelte';
   import UpdateButton from './features/updates/UpdateButton.svelte';
+  import UpdateDialog from './features/updates/UpdateDialog.svelte';
   import { check } from '@tauri-apps/plugin-updater';
   import { relaunch } from '@tauri-apps/plugin-process';
-  import { isTauri } from '@tauri-apps/api/core';
+  import { invoke, isTauri } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { WorkspaceSearch } from './lib/services/search.svelte';
   import { Workspace } from './lib/services/workspace.svelte';
@@ -33,6 +34,9 @@
   const plugins = new PluginManager();
   const updater = new AppUpdater({
     check: () => check({ timeout: 15000 }),
+    // A conditional request the server answers with 304 when nothing changed, so polling
+    // often costs almost nothing and the update action still appears promptly.
+    probe: () => invoke<boolean>('update_feed_changed'),
     prepare: async () => {
       if (busy || workspace.loading) throw new Error('A workspace operation is still running.');
       await workspace.prepareToClose();
@@ -41,11 +45,25 @@
     },
     relaunch,
   });
+  // Settings are loaded after construction, so apply them as soon as they arrive and
+  // whenever the user changes them.
+  $effect(() => {
+    updater.configure({
+      autoInstall: workspace.settings.autoUpdate,
+      intervalSeconds: workspace.settings.updateCheckSeconds,
+    });
+    plugins.configure({
+      autoUpdatePlugins: workspace.settings.autoUpdatePlugins,
+      intervalSeconds: workspace.settings.pluginCheckSeconds,
+    });
+  });
   onMount(() => {
     if (!isTauri()) return;
-    const stop = updater.startAutomaticChecks();
+    const stopUpdates = updater.startAutomaticChecks();
+    const stopPluginUpdates = plugins.startAutomaticChecks();
     return () => {
-      stop();
+      stopUpdates();
+      stopPluginUpdates();
       void updater.dispose();
     };
   });
@@ -359,7 +377,7 @@
     </main>
   </div>
 </div>
-<UpdateButton {updater} overlay />
+<UpdateDialog {updater} />
 {#if workspace.notification}<div class="toast" role="status">{workspace.notification}</div>{/if}
 <Modal
   bind:open={projectOpen}

@@ -63,7 +63,12 @@
   }
 
   onMount(() => {
-    if (desktop) void manager.refresh();
+    if (!desktop) return;
+    void manager.refresh().then(() => {
+      // Loading the catalog here is what makes per-plugin updates visible without
+      // having to open Browse first.
+      if (manager.plugins.length && !manager.catalogLoaded) void manager.refreshCatalog();
+    });
   });
 </script>
 
@@ -203,7 +208,35 @@
                     {#each plugin.capabilities as capability}<span>{capability}</span>{/each}
                   </div>
                 {/if}
+                {#if manager.updateFor(plugin)}
+                  <p class="update-line">
+                    <Icon name="download" size={14} />
+                    {t('Version {version} is available.', {
+                      version: manager.updateFor(plugin)?.latest?.version ?? '',
+                    })}
+                    {#if plugin.running}<span class="muted-note"
+                        >{t('Stop the plugin to update it.')}</span
+                      >{/if}
+                  </p>
+                {/if}
                 <div class="card-actions">
+                  {#if manager.updateFor(plugin)}
+                    <button
+                      class="button accent"
+                      disabled={manager.loading || manager.isBusy(plugin.id) || plugin.running}
+                      onclick={() => {
+                        const entry = manager.updateFor(plugin);
+                        if (entry) void manager.installFromCatalog(entry);
+                      }}
+                    >
+                      <Icon name="download" size={15} />
+                      {manager.isBusy(plugin.id)
+                        ? t('Updating…')
+                        : t('Update to {version}', {
+                            version: manager.updateFor(plugin)?.latest?.version ?? '',
+                          })}
+                    </button>
+                  {/if}
                   {#if plugin.enabled}
                     <button
                       class="button primary"

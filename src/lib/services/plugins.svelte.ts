@@ -63,6 +63,13 @@ export class PluginManager {
   /** The plugin currently hosted inline in the main window, and where to load it from. */
   active = $state<{ plugin: PluginInfo; url: string } | null>(null);
   opening = $state('');
+  /** Plugins updated without being asked, so the result can be reported once. */
+  autoUpdated = $state<string[]>([]);
+
+  private autoUpdatePlugins = false;
+  private intervalMs = 15 * 60 * 1000;
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private armed = false;
 
   private busy = $state<Record<string, boolean>>({});
 
@@ -86,6 +93,77 @@ export class PluginManager {
 
   get updatable() {
     return this.catalog.filter((entry) => entry.updateAvailable);
+  }
+
+  /** The catalog entry for an installed plugin, when the catalog has been loaded. */
+  entryFor(id: string) {
+    return this.catalog.find((entry) => entry.id === id);
+  }
+
+  updateFor(plugin: PluginInfo) {
+    const entry = this.entryFor(plugin.id);
+    return entry?.updateAvailable ? entry : undefined;
+  }
+
+  configure(options: { autoUpdatePlugins?: boolean; intervalSeconds?: number }) {
+    if (options.autoUpdatePlugins !== undefined) this.autoUpdatePlugins = options.autoUpdatePlugins;
+    if (options.intervalSeconds !== undefined) {
+      this.intervalMs = Math.max(30, options.intervalSeconds) * 1000;
+    }
+  }
+
+  /**
+   * Keep installed plugins current in the background.
+   *
+   * A plugin update replaces code on disk and stops the plugin if it is running, so it is
+   * only ever applied when that plugin is idle. Updating something the user is actively
+   * working in would pull it out from under them.
+   */
+  startAutomaticChecks(): () => void {
+    this.armed = true;
+    const tick = () => {
+      void this.checkForUpdates().finally(() => {
+        if (!this.armed) return;
+        this.timer = setTimeout(tick, this.intervalMs);
+      });
+    };
+    this.timer = setTimeout(tick, 12_000);
+    return () => {
+      this.armed = false;
+      if (this.timer) clearTimeout(this.timer);
+      this.timer = undefined;
+    };
+  }
+
+  /** Refresh the catalog quietly, then apply updates if the user asked for that. */
+  async checkForUpdates() {
+    if (!this.plugins.length) await this.refresh();
+    if (!this.plugins.length) return;
+    await this.refreshCatalog();
+    if (!this.catalogLoaded || !this.autoUpdatePlugins) return;
+    await this.applyAvailableUpdates();
+  }
+
+  async applyAvailableUpdates() {
+    const applied: string[] = [];
+    for (const plugin of this.plugins) {
+      const entry = this.updateFor(plugin);
+      if (!entry?.latest) continue;
+      // Never replace a plugin that is open or running.
+      if (plugin.running || this.active?.plugin.id === plugin.id) continue;
+      if (this.isBusy(plugin.id)) continue;
+      const before = this.error;
+      await this.installFromCatalog(entry, { quiet: true });
+      if (this.error === before) applied.push(`${entry.name} ${entry.latest.version}`);
+    }
+    if (applied.length) {
+      this.autoUpdated = applied;
+      this.notify(
+        applied.length === 1
+          ? t('{name} was updated.', { name: applied[0] })
+          : t('{count} plugins were updated.', { count: applied.length }),
+      );
+    }
   }
 
   async refresh() {
@@ -115,8 +193,10 @@ export class PluginManager {
     this.catalogError = '';
     try {
       const result = await invoke<CatalogResult>('fetch_plugin_catalog');
-      this.catalog = result.entries;
-      this.catalogUpdated = result.updated;
+      // Defensive: a malformed response must not leave `catalog` as something the rest
+      // of this class cannot iterate.
+      this.catalog = Array.isArray(result?.entries) ? result.entries : [];
+      this.catalogUpdated = result?.updated ?? '';
       this.catalogLoaded = true;
     } catch (error) {
       this.catalogError = errorText(error);
@@ -125,7 +205,7 @@ export class PluginManager {
     }
   }
 
-  async installFromCatalog(entry: CatalogEntry) {
+  async installFromCatalog(entry: CatalogEntry, options: { quiet?: boolean } = {}) {
     const target = entry.latest;
     if (!target || this.isBusy(entry.id) || this.loading) return;
     this.setBusy(entry.id, true);
@@ -136,9 +216,11 @@ export class PluginManager {
         version: target.version,
       });
       if (this.active?.plugin.id === installed.id) this.active = null;
-      this.notify(
-        t('{name} {version} installed.', { name: installed.name, version: installed.version }),
-      );
+      if (!options.quiet) {
+        this.notify(
+          t('{name} {version} installed.', { name: installed.name, version: installed.version }),
+        );
+      }
       await this.refresh();
       // Reconcile installed-versus-available state without a second network round trip
       // being required before the badge is correct.

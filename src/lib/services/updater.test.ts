@@ -276,3 +276,103 @@ describe('updater lifecycle edges', () => {
     }
   });
 });
+
+describe('cheap polling and automatic installation', () => {
+  it('skips the full check while the probe reports the feed is unchanged', async () => {
+    vi.useFakeTimers();
+    try {
+      const { app, provider } = fixture(true);
+      const probe = vi.fn().mockResolvedValue(false);
+      (provider as { probe?: () => Promise<boolean> }).probe = probe;
+
+      const stop = app.startAutomaticChecks();
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3 * 60 * 1000);
+
+      // Several polls, none of which cost a fetch-and-parse.
+      expect(probe.mock.calls.length).toBeGreaterThan(2);
+      expect(provider.check).not.toHaveBeenCalled();
+      expect(app.lastCheckedAt).not.toBe('');
+
+      // Once the feed moves, the real check runs.
+      probe.mockResolvedValue(true);
+      await vi.advanceTimersByTimeAsync(60 * 1000);
+      expect(provider.check).toHaveBeenCalled();
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still checks when the probe itself fails, rather than missing an update', async () => {
+    const { app, provider } = fixture(true);
+    (provider as { probe?: () => Promise<boolean> }).probe = vi
+      .fn()
+      .mockRejectedValue(new Error('probe blew up'));
+    await app.check();
+    expect(provider.check).toHaveBeenCalledOnce();
+  });
+
+  it('installs unattended at startup when automatic updates are on', async () => {
+    vi.useFakeTimers();
+    try {
+      const { app, update, provider } = fixture();
+      app.configure({ autoDownload: true, autoInstall: true });
+      const stop = app.startAutomaticChecks();
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(update.download).toHaveBeenCalledOnce();
+      expect(provider.prepare).toHaveBeenCalledOnce();
+      expect(update.install).toHaveBeenCalledOnce();
+      expect(provider.relaunch).toHaveBeenCalledOnce();
+      expect(app.restartPrompt).toBe(false);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('asks before restarting once the session is under way', async () => {
+    vi.useFakeTimers();
+    try {
+      const { app, update, provider } = fixture();
+      app.configure({ autoDownload: true, autoInstall: true, intervalSeconds: 60 });
+      const stop = app.startAutomaticChecks();
+
+      // Past the startup window: someone may be mid-sentence, so it must not restart.
+      provider.check.mockResolvedValueOnce(null);
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(90_000);
+
+      expect(app.restartPrompt).toBe(true);
+      expect(app.readyToRestart).toBe(true);
+      expect(update.install).not.toHaveBeenCalled();
+      expect(provider.relaunch).not.toHaveBeenCalled();
+
+      app.postpone();
+      expect(app.restartPrompt).toBe(false);
+      // Postponing keeps the staged update; it is applied on the next restart.
+      expect(app.readyToRestart).toBe(true);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never installs unattended when automatic updates are off', async () => {
+    vi.useFakeTimers();
+    try {
+      const { app, update, provider } = fixture(true);
+      const stop = app.startAutomaticChecks();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(update.download).toHaveBeenCalledOnce();
+      expect(update.install).not.toHaveBeenCalled();
+      expect(provider.relaunch).not.toHaveBeenCalled();
+      expect(app.restartPrompt).toBe(false);
+      expect(app.readyToRestart).toBe(true);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

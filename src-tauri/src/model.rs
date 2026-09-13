@@ -86,6 +86,31 @@ pub struct AppSettings {
     pub page_size: String,
     pub backup_enabled: bool,
     pub shortcuts: BTreeMap<String, String>,
+    // Defaulted so settings written by an older build still load rather than failing
+    // deserialization and resetting everything the user configured.
+    #[serde(default = "default_true")]
+    pub auto_update: bool,
+    #[serde(default = "default_true")]
+    pub auto_update_plugins: bool,
+    #[serde(default = "default_update_seconds")]
+    pub update_check_seconds: u64,
+    #[serde(default = "default_plugin_check_seconds")]
+    pub plugin_check_seconds: u64,
+}
+fn default_true() -> bool {
+    true
+}
+/// Frequent by request. The feed is a small static file behind a CDN, so this is cheap,
+/// and it is adjustable in Settings for anyone who wants it quieter.
+pub const DEFAULT_UPDATE_CHECK_SECONDS: u64 = 60;
+pub const DEFAULT_PLUGIN_CHECK_SECONDS: u64 = 900;
+pub const MIN_CHECK_SECONDS: u64 = 30;
+pub const MAX_CHECK_SECONDS: u64 = 86_400;
+fn default_update_seconds() -> u64 {
+    DEFAULT_UPDATE_CHECK_SECONDS
+}
+fn default_plugin_check_seconds() -> u64 {
+    DEFAULT_PLUGIN_CHECK_SECONDS
 }
 fn default_language() -> String {
     "hu".into()
@@ -104,6 +129,10 @@ impl Default for AppSettings {
             page_size: "A4".into(),
             backup_enabled: true,
             shortcuts: BTreeMap::new(),
+            auto_update: true,
+            auto_update_plugins: true,
+            update_check_seconds: DEFAULT_UPDATE_CHECK_SECONDS,
+            plugin_check_seconds: DEFAULT_PLUGIN_CHECK_SECONDS,
         }
     }
 }

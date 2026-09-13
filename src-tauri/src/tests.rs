@@ -502,3 +502,51 @@ fn every_registered_command_is_permitted() {
         );
     }
 }
+
+/// Settings written by 0.2.0 must still load. A missing field that is not defaulted makes
+/// deserialization fail, which would silently reset every preference on upgrade.
+#[test]
+fn settings_saved_by_an_older_version_still_load() {
+    let stored = json!({
+        "language": "hu",
+        "theme": "dark",
+        "density": "comfortable",
+        "editorFontSize": 15,
+        "lastProjectId": null,
+        "lastView": "notebook",
+        "onboardingComplete": true,
+        "author": "Tester",
+        "pageSize": "A4",
+        "backupEnabled": true,
+        "shortcuts": {}
+    });
+    let settings: AppSettings = serde_json::from_value(stored).expect("older settings must load");
+    assert_eq!(settings.author, "Tester");
+    assert_eq!(settings.theme, "dark");
+    assert!(settings.auto_update, "automatic updates default to on");
+    assert!(settings.auto_update_plugins);
+    assert_eq!(settings.update_check_seconds, crate::model::DEFAULT_UPDATE_CHECK_SECONDS);
+    assert_eq!(settings.plugin_check_seconds, crate::model::DEFAULT_PLUGIN_CHECK_SECONDS);
+}
+
+#[test]
+fn check_intervals_are_bounded() {
+    let (_dir, workspace, _project) = fixture();
+    let mut settings = workspace.get_settings().unwrap();
+
+    settings.update_check_seconds = 1;
+    assert!(workspace.save_settings(settings.clone()).is_err());
+
+    settings.update_check_seconds = crate::model::MAX_CHECK_SECONDS + 1;
+    assert!(workspace.save_settings(settings.clone()).is_err());
+
+    settings.update_check_seconds = 60;
+    settings.plugin_check_seconds = 5;
+    assert!(workspace.save_settings(settings.clone()).is_err());
+
+    settings.plugin_check_seconds = 900;
+    workspace.save_settings(settings).unwrap();
+    let saved = workspace.get_settings().unwrap();
+    assert_eq!(saved.update_check_seconds, 60);
+    assert_eq!(saved.plugin_check_seconds, 900);
+}

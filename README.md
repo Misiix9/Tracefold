@@ -52,10 +52,15 @@ plugins you trust.
 
 ## Updates
 
-Settings shows your installed version. Tracefold looks for a newer one on its own and
-downloads it quietly in the background while you keep working. When it is ready, a purple
-**Restart to update** button appears above the divider preceding Settings, and clicking it
-installs the update and reopens Tracefold — no installer, no prompts. Your work is saved and
-backed up first.
+Tracefold keeps itself up to date. It checks on its own, downloads a new version quietly in
+the background while you keep working, and installs it the next time you open the app — no
+installer, no prompts. If a new version arrives while you are working, Tracefold asks before
+restarting. Your work is saved and every project backed up first.
+
+Installed plugins update the same way, and each one also has a one-click **Update** on the
+Plugins page.
+
+Both can be switched off in **Settings & recovery**, where you can also choose how often
+Tracefold looks. Settings shows your installed version.
 
 Internet access is only needed for update checks, update downloads, and browsing plugins.

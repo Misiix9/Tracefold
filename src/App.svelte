@@ -69,6 +69,7 @@
     { id: 'plugins', label: t('Plugins'), icon: 'code', kinds: [] },
   ]);
   const current = $derived(navigation.find((n) => n.id === workspace.view)?.label ?? t('Settings'));
+  const hostingPlugin = $derived(workspace.view === 'plugins' && Boolean(plugins.active));
   const searchResults = new WorkspaceSearch(workspace.repo, () => workspace.flush());
   let searchKind = $state<import('./lib/domain/types').EntityKind | ''>('');
   $effect(() => {
@@ -326,33 +327,35 @@
           onclick={() => (workspace.error = '')}><Icon name="close" size={16} /></button
         >
       </div>{/if}
-    <main
-      class="workspace-content"
-      class:hosting={workspace.view === 'plugins' && plugins.active}
-      id="main-content"
-      tabindex="-1"
-    >
-      {#key workspace.projectId}
-        {#if workspace.loading}<EmptyState
-            title={t('Opening your workspace')}
-            description={t('Loading your local notes and projects.')}
+    <main class="workspace-content" class:hosting={hostingPlugin} id="main-content" tabindex="-1">
+      {#if !hostingPlugin}{#key workspace.projectId}
+          {#if workspace.loading}<EmptyState
+              title={t('Opening your workspace')}
+              description={t('Loading your local notes and projects.')}
+            />
+          {:else if workspace.view === 'notebook'}<NotebookView {workspace} />
+          {:else if workspace.view === 'findings'}<FindingsView {workspace} />
+          {:else if workspace.view === 'cases' || workspace.view === 'runs' || workspace.view === 'coverage'}<TestingView
+              {workspace}
+              section={workspace.view}
+            />
+          {:else if workspace.view === 'evidence'}<EvidenceView {workspace} />
+          {:else if workspace.view === 'templates'}<TemplatesView {workspace} />
+          {:else if workspace.view === 'reports'}<ReportsView {workspace} />
+          {:else if workspace.view === 'plugins'}<PluginsView manager={plugins} />
+          {:else}<SettingsView {workspace} {updater} />{/if}
+        {/key}{/if}
+      <!-- Kept mounted while a plugin is running, so leaving and returning to it does not
+           reload the plugin's page and lose whatever the user had open in it. -->
+      {#if plugins.active}
+        <div class="plugin-slot" class:offscreen={!hostingPlugin}>
+          <PluginHost
+            manager={plugins}
+            theme={resolvedTheme}
+            language={workspace.settings.language}
           />
-        {:else if workspace.view === 'notebook'}<NotebookView {workspace} />
-        {:else if workspace.view === 'findings'}<FindingsView {workspace} />
-        {:else if workspace.view === 'cases' || workspace.view === 'runs' || workspace.view === 'coverage'}<TestingView
-            {workspace}
-            section={workspace.view}
-          />
-        {:else if workspace.view === 'evidence'}<EvidenceView {workspace} />
-        {:else if workspace.view === 'templates'}<TemplatesView {workspace} />
-        {:else if workspace.view === 'reports'}<ReportsView {workspace} />
-        {:else if workspace.view === 'plugins'}{#if plugins.active}<PluginHost
-              manager={plugins}
-              theme={resolvedTheme}
-              language={workspace.settings.language}
-            />{:else}<PluginsView manager={plugins} />{/if}
-        {:else}<SettingsView {workspace} {updater} />{/if}
-      {/key}
+        </div>
+      {/if}
     </main>
   </div>
 </div>

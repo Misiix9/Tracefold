@@ -38,9 +38,16 @@ node scripts/build-catalog.mjs dist/plugins
 Then publish the `.tracefold-plugin` file as a release asset under the tag the catalog
 entry names, and commit the updated `catalog.json`.
 
+`--check` verifies that the catalog still matches the built packages, and fails if a
+checksum has drifted. CI runs it on every change.
+
 Entries that already exist are never rewritten. A published checksum is a promise that a
 specific artifact will verify; changing it would break installs that are already in
 flight. Ship a new version instead.
+
+If a version has **not** been published yet and its source changed, remove that version
+from `catalog.json` and run the generator again. Doing it by hand is deliberate: it should
+never be something a build step does on its own.
 
 ## Entry format
 

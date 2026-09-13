@@ -6,7 +6,6 @@
   let { manager, theme, language }: { manager: PluginManager; theme: string; language: string } =
     $props();
 
-  let frame = $state<HTMLIFrameElement | null>(null);
   let reloadKey = $state(0);
 
   const active = $derived(manager.active);
@@ -62,7 +61,6 @@
     </header>
     {#key reloadKey}
       <iframe
-        bind:this={frame}
         class="plugin-frame"
         src={source}
         title={active.plugin.name}

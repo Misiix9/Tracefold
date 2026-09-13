@@ -553,6 +553,16 @@ kbd {
   flex-direction: column;
   overflow: hidden;
 }
+.plugin-slot {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+/* Hidden rather than unmounted: the plugin keeps its page state while you work elsewhere. */
+.plugin-slot.offscreen {
+  display: none;
+}
 .page {
   padding: 32px 36px;
   max-width: 1500px;

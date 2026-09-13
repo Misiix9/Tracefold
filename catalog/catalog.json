@@ -1,0 +1,32 @@
+{
+  "schema": "tracefold.catalog.v1",
+  "updated": "2026-09-13T12:02:42.791Z",
+  "plugins": [
+    {
+      "id": "tracefold.discovery",
+      "name": "Tracefold Discovery",
+      "publisher": "Tracefold",
+      "description": "Authenticated website and API discovery with multi-user authorization testing. Crawls as a saved user, maps API calls to the pages that make them, and compares endpoint access across accounts.",
+      "category": "Discovery",
+      "homepage": "https://github.com/Misiix9/Tracefold/tree/main/plugins/tracefold-discovery",
+      "versions": [
+        {
+          "version": "2.1.0",
+          "apiVersion": 1,
+          "minTracefoldVersion": "0.2.1",
+          "url": "https://github.com/Misiix9/Tracefold/releases/download/plugin-tracefold.discovery-v2.1.0/tracefold-discovery-v2.1.0.tracefold-plugin",
+          "sha256": "c8ad0970b6fc43ef845d33a2ba3b2985d3f8db5a2010eed24c7ba248bf27fb7e",
+          "size": 69909,
+          "capabilities": [
+            "network.targeted-http",
+            "browser.playwright",
+            "local.encrypted-secrets",
+            "local.files.app-data"
+          ],
+          "published": "2026-09-13T12:02:42.778Z",
+          "notes": "Runs inside the Tracefold window, follows the Tracefold theme, and stores accounts, sessions, scans and reports in its own persistent plugin directory. The first launch prepares a private Python environment and Chromium build."
+        }
+      ]
+    }
+  ]
+}

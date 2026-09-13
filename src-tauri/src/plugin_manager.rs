@@ -885,6 +885,24 @@ mod tests {
         assert!(install_package_bytes(&runtime, &buffer, None).is_err());
     }
 
+    /// The real Discovery package, built by scripts/package-plugin.mjs, must install
+    /// through the same path as any other package. Skipped when it has not been built.
+    #[test]
+    fn installs_the_packaged_discovery_plugin_when_it_has_been_built() {
+        let candidate = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../dist/plugins/tracefold-discovery-v2.1.0.tracefold-plugin");
+        let Ok(archive) = fs::read(&candidate) else {
+            eprintln!("skipping: run `node scripts/package-plugin.mjs plugins/tracefold-discovery` first");
+            return;
+        };
+        let runtime = PluginRuntime::open(tempdir().unwrap().keep()).unwrap();
+        let info = install_package_bytes(&runtime, &archive, Some(("tracefold.discovery", "2.1.0"))).unwrap();
+        assert_eq!(info.id, "tracefold.discovery");
+        assert_eq!(info.name, "Tracefold Discovery");
+        assert!(info.capabilities.contains(&"browser.playwright".to_string()));
+        assert!(info.enabled);
+    }
+
     #[test]
     fn orders_versions_and_tolerates_malformed_ones() {
         use std::cmp::Ordering;

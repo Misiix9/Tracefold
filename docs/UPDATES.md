@@ -1,8 +1,34 @@
 # In-app updates and releases
 
-Tracefold checks for a newer compatible release shortly after opening and every four hours while running. When a release exists, a purple **Update to newest version** action appears above the divider preceding Settings (localized in Hungarian). Clicking it saves pending edits, pauses active session timers, backs up projects, downloads the signed artifact, installs it and restarts. Download progress stays inside the app; Windows may show its native installation progress window. Users do not visit GitHub or manually download updates.
+Tracefold looks for a newer compatible release on its own: shortly after opening, every
+hour while running, and when its window regains focus (at most once every fifteen minutes).
+An unreachable feed backs off instead of retrying continuously. No user action is required
+for an update to be found.
 
-The workspace has no application server or account. GitHub Releases serves public, static update files over HTTPS. Offline or unavailable-feed checks are quiet and do not interrupt testing. The plugin verifies the artifact against the embedded public key before installation. An interrupted check or invalid download cannot trigger installation. A failed restart can be retried without downloading or installing again, after saving any intervening edits.
+When a release exists, Tracefold downloads it **quietly in the background**. Nothing is
+interrupted: no progress overlay appears, work continues, and nothing is installed. Once the
+artifact is staged, a purple **Restart to update** action appears above the divider
+preceding Settings (localized in Hungarian). Clicking it saves pending edits, pauses active
+session timers, backs up every project, installs the staged update and restarts into the new
+version.
+
+Saving and backing up happen immediately before installation rather than before the
+download, so the recovery snapshot covers everything written while the download was running.
+A failure to save or back up still prevents installation.
+
+Windows updates are silent: no installer window, no user interaction, no administrator
+prompt. Tracefold installs per user, so the update applies and the application relaunches on
+its own. macOS and Linux replace the application in place. Users never visit GitHub or
+download an installer themselves.
+
+If the background download fails, nothing changes: the update is still offered, and clicking
+it downloads again. A failed restart can be retried without downloading or installing again,
+after saving any edits made in between.
+
+The workspace has no application server or account. GitHub Releases serves public, static
+update files over HTTPS. Offline or unavailable-feed checks are quiet and do not interrupt
+testing. The plugin verifies the artifact against the embedded public key before
+installation. An interrupted check or invalid download cannot trigger installation.
 
 ## Data preservation
 
@@ -22,7 +48,7 @@ The private signing key is supplied through the repository's `TAURI_SIGNING_PRIV
 
 ## Validation status
 
-Controller tests cover unavailable/offline feeds, backup failure, download/signature failure, ordered save/install/restart, concurrent requests and restart retry. Component tests cover hidden/available states, both languages and progress. Native version-to-version installation, post-update data retention and platform permission behavior are separate acceptance checks; passing unit tests alone is not proof of those checks.
+Controller tests cover unavailable/offline feeds, backup failure, download/signature failure, ordered download/save/install/restart, background staging, a failed background download falling back to an on-click download, concurrent requests, restart retry, the hourly schedule with failure backoff, and focus-triggered rechecking with throttling. Component tests cover hidden/available/staged states, both languages and progress. Native version-to-version installation, post-update data retention and platform permission behavior are separate acceptance checks; passing unit tests alone is not proof of those checks.
 
 Reference: [Tauri updater documentation](https://v2.tauri.app/plugin/updater/).
 

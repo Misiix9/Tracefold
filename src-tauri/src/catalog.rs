@@ -526,6 +526,23 @@ mod tests {
         assert!(compatibility(&version("https://example.com/a.tracefold-plugin")).is_ok());
     }
 
+    /// The catalog this repository publishes must always satisfy the parser that will
+    /// read it. A malformed entry would otherwise only surface in a shipped build.
+    #[test]
+    fn the_published_catalog_is_valid_and_installable() {
+        const PUBLISHED: &str = include_str!("../../catalog/catalog.json");
+        let index: CatalogIndex = serde_json::from_str(PUBLISHED).expect("catalog.json must parse");
+        validate_index(&index).expect("catalog.json must satisfy the host's validation");
+        assert!(!index.plugins.is_empty(), "the catalog should list at least one plugin");
+        for plugin in &index.plugins {
+            for entry in &plugin.versions {
+                assert!(entry.url.starts_with("https://"), "{} must be served over HTTPS", entry.url);
+                assert_eq!(entry.sha256.len(), 64);
+                assert!(entry.size > 0, "a catalog entry must record its package size");
+            }
+        }
+    }
+
     #[test]
     fn source_falls_back_to_the_shipped_catalog_and_rejects_insecure_overrides() {
         assert_eq!(normalize_source(None).unwrap(), DEFAULT_CATALOG_URL);

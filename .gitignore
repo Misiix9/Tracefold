@@ -19,3 +19,12 @@ playwright-report/
 *.pfx
 *.pem
 release-artifacts/
+
+# Plugin build outputs and Discovery's local runtime
+plugins/*/.tracefold/
+plugins/*/.venv/
+plugins/*/runtime/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.tracefold-plugin

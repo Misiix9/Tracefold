@@ -143,7 +143,7 @@ validation, package limits and atomic replacement are identical.
 Build a package with:
 
 ```bash
-node scripts/package-plugin.mjs plugins/<directory> dist/plugins
+node scripts/package-plugin.mjs plugins/<directory> dist-plugins
 ```
 
 The archive is deterministic, so rebuilding the same source reproduces the same checksum.

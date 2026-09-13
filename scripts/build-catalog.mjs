@@ -7,7 +7,7 @@
  * would break installs for anyone whose catalog fetch lands mid-change. New versions are
  * added; existing ones are only ever left alone.
  *
- *   node scripts/build-catalog.mjs dist/plugins
+ *   node scripts/build-catalog.mjs dist-plugins
  */
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -72,7 +72,7 @@ async function check(input, catalog, metadataFiles) {
 async function main() {
   const args = process.argv.slice(2);
   const verifyOnly = args.includes('--check');
-  const input = resolve(args.find((value) => !value.startsWith('--')) ?? 'dist/plugins');
+  const input = resolve(args.find((value) => !value.startsWith('--')) ?? 'dist-plugins');
   const catalog = await readCatalog();
 
   const metadataFiles = (await readdir(input)).filter((name) => name.endsWith('.tracefold-plugin.json'));

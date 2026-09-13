@@ -890,7 +890,7 @@ mod tests {
     #[test]
     fn installs_the_packaged_discovery_plugin_when_it_has_been_built() {
         let candidate = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../dist/plugins/tracefold-discovery-v2.1.0.tracefold-plugin");
+            .join("../dist-plugins/tracefold-discovery-v2.1.0.tracefold-plugin");
         let Ok(archive) = fs::read(&candidate) else {
             eprintln!("skipping: run `node scripts/package-plugin.mjs plugins/tracefold-discovery` first");
             return;

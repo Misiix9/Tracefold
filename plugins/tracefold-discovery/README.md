@@ -81,7 +81,7 @@ Tracefold.
 ## Building the package
 
 ```bash
-node scripts/package-plugin.mjs plugins/tracefold-discovery dist/plugins
+node scripts/package-plugin.mjs plugins/tracefold-discovery dist-plugins
 ```
 
 This produces a deterministic `.tracefold-plugin` archive and a metadata file recording its

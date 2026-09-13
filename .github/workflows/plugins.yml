@@ -31,19 +31,19 @@ jobs:
           python -m pytest -q
 
       - name: Build plugin packages
-        run: node scripts/package-plugin.mjs plugins/tracefold-discovery dist/plugins
+        run: node scripts/package-plugin.mjs plugins/tracefold-discovery dist-plugins
 
       # A published checksum is a promise that a specific artifact will verify. If the
       # source no longer reproduces it, that only surfaces as a failed install for users.
       - name: Verify the catalog matches the built packages
-        run: node scripts/build-catalog.mjs --check dist/plugins
+        run: node scripts/build-catalog.mjs --check dist-plugins
 
       - name: Confirm the package builds reproducibly
         run: |
-          node scripts/package-plugin.mjs plugins/tracefold-discovery dist/plugins-again
-          for file in dist/plugins/*.tracefold-plugin; do
+          node scripts/package-plugin.mjs plugins/tracefold-discovery dist-plugins-again
+          for file in dist-plugins/*.tracefold-plugin; do
             name="$(basename "$file")"
-            if ! cmp -s "$file" "dist/plugins-again/$name"; then
+            if ! cmp -s "$file" "dist-plugins-again/$name"; then
               echo "::error::$name is not reproducible between builds"
               exit 1
             fi
@@ -55,7 +55,7 @@ jobs:
           name: tracefold-plugins
           if-no-files-found: error
           retention-days: 14
-          path: dist/plugins/*
+          path: dist-plugins/*
 
   publish:
     if: startsWith(github.ref, 'refs/tags/plugin-')
@@ -68,7 +68,7 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: tracefold-plugins
-          path: dist/plugins
+          path: dist-plugins
 
       # The catalog entry already names this tag and this checksum, so the asset published
       # here has to be exactly the one the catalog promises.
@@ -87,9 +87,9 @@ jobs:
             const entry = entries.find((candidate) => candidate.url.includes(`/download/${tag}/`));
             if (!entry) throw new Error(`No catalog entry publishes under tag ${tag}.`);
             const file = decodeURIComponent(entry.url.split("/").pop());
-            const names = await readdir("dist/plugins");
+            const names = await readdir("dist-plugins");
             if (!names.includes(file)) throw new Error(`${file} was not built.`);
-            const bytes = await readFile(`dist/plugins/${file}`);
+            const bytes = await readFile(`dist-plugins/${file}`);
             const sha256 = createHash("sha256").update(bytes).digest("hex");
             if (sha256 !== entry.sha256) {
               throw new Error(`${file} is ${sha256}, but the catalog promises ${entry.sha256}.`);
@@ -109,5 +109,5 @@ jobs:
           gh release create "$RELEASE_TAG" --verify-tag --draft \
             --title "Tracefold plugin $RELEASE_TAG" \
             --notes "Plugin package published for the Tracefold plugin catalog." \
-            dist/plugins/*.tracefold-plugin
+            dist-plugins/*.tracefold-plugin
           gh release edit "$RELEASE_TAG" --draft=false

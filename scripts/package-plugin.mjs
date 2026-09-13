@@ -145,7 +145,7 @@ async function main() {
     throw new Error('Usage: node scripts/package-plugin.mjs PLUGIN_DIRECTORY [OUTPUT_DIRECTORY]');
   }
   const source = resolve(sourceArgument);
-  const output = resolve(outputArgument ?? 'dist/plugins');
+  const output = resolve(outputArgument ?? 'dist-plugins');
 
   const manifest = JSON.parse(await readFile(join(source, 'manifest.json'), 'utf8'));
   for (const field of ['schema', 'id', 'name', 'version', 'publisher', 'apiVersion', 'runtime']) {

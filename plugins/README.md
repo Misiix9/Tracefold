@@ -52,8 +52,8 @@ than a reload, so a plugin can restyle in place without losing the user's work.
 ## Building a package
 
 ```bash
-node scripts/package-plugin.mjs plugins/<directory> dist/plugins
-node scripts/build-catalog.mjs dist/plugins
+node scripts/package-plugin.mjs plugins/<directory> dist-plugins
+node scripts/build-catalog.mjs dist-plugins
 ```
 
 `package-plugin.mjs` produces a deterministic archive — sorted entries, fixed timestamps,

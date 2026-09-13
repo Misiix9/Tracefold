@@ -37,8 +37,8 @@ host resolves both against the catalog it fetched itself.
 ## Adding a version
 
 ```bash
-node scripts/package-plugin.mjs plugins/<plugin-directory> dist/plugins
-node scripts/build-catalog.mjs dist/plugins
+node scripts/package-plugin.mjs plugins/<plugin-directory> dist-plugins
+node scripts/build-catalog.mjs dist-plugins
 ```
 
 Then publish the `.tracefold-plugin` file as a release asset under the tag the catalog

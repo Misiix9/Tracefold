@@ -105,14 +105,16 @@ export class PluginManager {
     }
   }
 
-  async refreshCatalog(source?: string) {
+  /**
+   * The catalog address is host configuration, not a parameter. Whoever picks the catalog
+   * picks what is trusted, so that choice never travels through this layer.
+   */
+  async refreshCatalog() {
     if (this.catalogLoading) return;
     this.catalogLoading = true;
     this.catalogError = '';
     try {
-      const result = await invoke<CatalogResult>('fetch_plugin_catalog', {
-        source: source ?? null,
-      });
+      const result = await invoke<CatalogResult>('fetch_plugin_catalog');
       this.catalog = result.entries;
       this.catalogUpdated = result.updated;
       this.catalogLoaded = true;

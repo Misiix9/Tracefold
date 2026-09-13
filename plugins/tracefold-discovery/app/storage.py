@@ -130,8 +130,14 @@ class AccountStore:
         values = [updated if item.get("id") == account_id else item for item in values]
         old_secrets = self.vault.load(account_id)
         new_secrets = self._secrets(value)
+        # A blank field on edit means "unchanged", but only while the account still uses
+        # that credential. Changing the authentication mode must not silently retain the
+        # secret belonging to the old one.
+        mode_unchanged = existing.get("auth_mode") == value.auth_mode
         for key in ("password", "bearer_token"):
-            if not new_secrets.get(key) and old_secrets.get(key):
+            if new_secrets.get(key) or not old_secrets.get(key):
+                continue
+            if mode_unchanged:
                 new_secrets[key] = old_secrets[key]
         for key in ("storage_state", "session_storage", "captured_token", "session_updated_at"):
             if key in old_secrets:
@@ -188,6 +194,7 @@ class AccountStore:
             "password_selector": value.password_selector,
             "submit_selector": value.submit_selector,
             "token_storage_key": value.token_storage_key,
+            "ignore_https_errors": value.ignore_https_errors,
             "extra_headers": value.extra_headers,
             "allowed_origins": [str(item) for item in value.allowed_origins],
             "variables": value.variables,

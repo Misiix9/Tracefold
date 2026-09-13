@@ -164,8 +164,8 @@ async fn install_plugin_from_file(app: tauri::AppHandle, state: State<'_, Arc<Pl
 }
 
 #[tauri::command]
-async fn fetch_plugin_catalog(state: State<'_, Arc<CatalogService>>, source: Option<String>) -> Result<catalog::CatalogResult> {
-    state.fetch(source).await
+async fn fetch_plugin_catalog(state: State<'_, Arc<CatalogService>>) -> Result<catalog::CatalogResult> {
+    state.fetch().await
 }
 
 #[tauri::command]
@@ -244,9 +244,10 @@ pub fn run() {
             let root = app.path().app_local_data_dir()?;
             let workspace = store::Workspace::open(&root)?;
             let language = workspace.get_settings()?.language;
-            let plugins = Arc::new(PluginRuntime::open(root.join("plugins"))?);
+            let plugin_root = root.join("plugins");
+            let plugins = Arc::new(PluginRuntime::open(plugin_root.clone())?);
             app.manage(Arc::new(Mutex::new(workspace)));
-            app.manage(Arc::new(CatalogService::new(Arc::clone(&plugins))));
+            app.manage(Arc::new(CatalogService::new(Arc::clone(&plugins), plugin_root)));
             app.manage(plugins);
             menus::apply(app.handle(), &language)?;
             Ok(())

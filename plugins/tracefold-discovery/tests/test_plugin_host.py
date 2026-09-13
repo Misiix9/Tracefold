@@ -99,3 +99,80 @@ def test_reveal_only_accepts_reports_this_plugin_wrote():
 def test_saving_a_report_requires_a_completed_job():
     assert client.post("/api/scans/deadbeef/save/json").status_code == 404
     assert client.post("/api/test-runs/deadbeef/save/json").status_code == 404
+
+
+def test_credentials_are_scoped_to_the_active_authentication_mode():
+    """Changing mode must not leave a credential from the old one being sent."""
+    from app.auth import account_auth_context
+
+    stored = {
+        "id": "a1",
+        "name": "Portal user",
+        "base_url": "https://example.com",
+        "bearer_token": "typed-token",
+        "captured_token": "captured-token",
+        "storage_state": {"cookies": []},
+        "session_storage": {"https://example.com": {"k": "v"}},
+    }
+
+    bearer = account_auth_context({**stored, "auth_mode": "bearer"})
+    assert bearer["bearer_token"] == "typed-token"
+    # A bearer account authenticates with its token, not a browser session.
+    assert bearer["storage_state"] is None
+    assert bearer["session_storage"] == {}
+
+    for mode in ("interactive", "form"):
+        context = account_auth_context({**stored, "auth_mode": mode})
+        # The stale typed token must not be preferred once the mode no longer uses it.
+        assert context["bearer_token"] == "captured-token"
+        assert context["storage_state"] == {"cookies": []}
+
+
+def test_interactive_login_verifies_certificates_unless_opted_in():
+    from app.models import AccountInput
+
+    account = AccountInput(name="User", base_url="https://example.com")
+    assert account.ignore_https_errors is False
+
+    opted_in = AccountInput(name="User", base_url="https://example.com", ignore_https_errors=True)
+    assert opted_in.ignore_https_errors is True
+
+
+def test_changing_authentication_mode_drops_the_previous_secret(tmp_path):
+    from app.models import AccountInput
+    from app.storage import AccountStore
+
+    store = AccountStore(tmp_path)
+    created = store.create(
+        AccountInput(
+            name="Bearer user",
+            base_url="https://example.com",
+            auth_mode="bearer",
+            bearer_token="secret-token",
+        )
+    )
+
+    # Editing without retyping the token keeps it while the mode is unchanged.
+    store.update(
+        created["id"],
+        AccountInput(name="Bearer user renamed", base_url="https://example.com", auth_mode="bearer"),
+    )
+    assert store.get_runtime(created["id"])["bearer_token"] == "secret-token"
+
+    # Switching to interactive must not silently retain it.
+    store.update(
+        created["id"],
+        AccountInput(name="Bearer user renamed", base_url="https://example.com", auth_mode="interactive"),
+    )
+    assert not store.get_runtime(created["id"]).get("bearer_token")
+
+
+def test_two_reports_saved_in_the_same_second_do_not_collide():
+    first = write_export(SAMPLE_RESULT, "json", "scan", "tracefold-example.com")
+    second = write_export(SAMPLE_RESULT, "json", "scan", "tracefold-example.com")
+    try:
+        assert first["path"] != second["path"]
+        assert Path(first["path"]).is_file() and Path(second["path"]).is_file()
+    finally:
+        Path(first["path"]).unlink(missing_ok=True)
+        Path(second["path"]).unlink(missing_ok=True)

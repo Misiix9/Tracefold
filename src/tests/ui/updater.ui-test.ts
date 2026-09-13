@@ -123,4 +123,29 @@ describe('update availability UI', () => {
     flushSync(() => setLanguage('en'));
     expect(document.querySelector('button')?.textContent).toContain('Restart to update');
   });
+  it('applies the failure backoff to a focus-triggered check, not just the timer', async () => {
+    vi.useFakeTimers();
+    try {
+      const check = vi.fn().mockResolvedValueOnce(null);
+      const updater = new AppUpdater({ check, prepare: vi.fn(), relaunch: vi.fn() });
+      const stop = updater.startAutomaticChecks();
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(check).toHaveBeenCalledTimes(1);
+
+      // A focus check that fails must schedule the short retry rather than leave the next
+      // attempt an hour away.
+      check.mockRejectedValue(new Error('offline'));
+      await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
+      const beforeFocus = check.mock.calls.length;
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(check.mock.calls.length).toBe(beforeFocus + 1);
+
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+      expect(check.mock.calls.length).toBe(beforeFocus + 2);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

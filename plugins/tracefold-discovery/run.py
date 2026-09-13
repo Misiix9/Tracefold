@@ -133,12 +133,26 @@ def stamp_path(data_dir: Path) -> Path:
     return data_dir / "runtime" / ".tracefold-requirements"
 
 
+def browsers_stamp_path(data_dir: Path) -> Path:
+    return data_dir / "runtime" / ".tracefold-browsers"
+
+
 def runtime_is_current(data_dir: Path) -> bool:
     """A changed requirements.txt must reinstall rather than run against stale packages."""
     try:
         return stamp_path(data_dir).read_text(encoding="utf-8").strip() == requirements_stamp()
     except OSError:
         return False
+
+
+def browsers_ready(data_dir: Path) -> bool:
+    """Tracked separately from the dependencies.
+
+    A Chromium download that fails is not fatal, but it must not be remembered as done:
+    otherwise the next launch takes the fast path and browser login stays broken forever
+    with no way to retry short of deleting the runtime by hand.
+    """
+    return browsers_stamp_path(data_dir).is_file()
 
 
 class BootstrapHandler(BaseHTTPRequestHandler):
@@ -323,23 +337,31 @@ def prepare_runtime(data_dir: Path) -> Path | None:
         )
         return None
 
+    # Dependencies are done regardless of what the browser step does next.
+    try:
+        stamp_path(data_dir).write_text(requirements_stamp(), encoding="utf-8")
+    except OSError:
+        pass
+
     ok, detail = run_command(
         [str(interpreter), "-m", "playwright", "install", "chromium"],
         "Downloading Discovery's private Chromium build…",
         runtime_environment(data_dir),
     )
-    if not ok:
+    if ok:
+        try:
+            browsers_stamp_path(data_dir).write_text("chromium", encoding="utf-8")
+        except OSError:
+            pass
+    else:
         # Bearer-token discovery and test runs still work without a browser, so this is a
-        # warning rather than a failure. Interactive login will report it when used.
+        # warning rather than a failure. The stamp stays unwritten so the next launch
+        # retries the download instead of assuming it succeeded.
         set_state(
             warning="Chromium could not be installed. Browser login and authenticated "
-            "crawling will not work until it is available; bearer-token testing still works.",
+            "crawling will not work until it is available; bearer-token testing still works. "
+            "Reopening the plugin tries again.",
         )
-
-    try:
-        stamp_path(data_dir).write_text(requirements_stamp(), encoding="utf-8")
-    except OSError:
-        pass
     return interpreter
 
 
@@ -378,12 +400,20 @@ def main() -> int:
         return serve(port, data_dir)
 
     # Already runnable as launched: a development checkout, or a host interpreter that
-    # happens to have everything.
-    if modules_available():
+    # happens to have everything. Only take this path when a browser is genuinely
+    # available too, or an installed plugin would serve with an empty Chromium directory
+    # and fail at the first login.
+    browser_supplied = bool(os.environ.get("PLAYWRIGHT_BROWSERS_PATH"))
+    if modules_available() and (browser_supplied or browsers_ready(data_dir)):
         return serve(port, data_dir)
 
     interpreter = venv_interpreter(data_dir)
-    if interpreter.is_file() and runtime_is_current(data_dir) and modules_available(interpreter):
+    if (
+        interpreter.is_file()
+        and runtime_is_current(data_dir)
+        and browsers_ready(data_dir)
+        and modules_available(interpreter)
+    ):
         return run_child(interpreter, port, data_dir)
 
     # The port must answer before the host's health check expires, so bind it now and

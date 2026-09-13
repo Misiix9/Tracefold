@@ -35,7 +35,9 @@ class SessionCaptureManager:
         browser: Browser | None = None
         try:
             browser = await playwright.chromium.launch(headless=False)
-            context_options: dict[str, Any] = {"ignore_https_errors": True}
+            context_options: dict[str, Any] = {
+                "ignore_https_errors": bool(account.get("ignore_https_errors", False)),
+            }
             if account.get("storage_state"):
                 context_options["storage_state"] = account["storage_state"]
             context = await browser.new_context(**context_options)
@@ -138,13 +140,26 @@ class SessionCaptureManager:
 
 
 def account_auth_context(account: dict[str, Any]) -> dict[str, Any]:
+    mode = account.get("auth_mode")
+    # Scoped to the active mode on purpose. A bearer account authenticates with its typed
+    # token; interactive and form accounts authenticate with the session they captured.
+    # Falling back across modes would keep sending a credential the user has switched away
+    # from, which is exactly what changing the mode is meant to stop.
+    if mode == "bearer":
+        token = account.get("bearer_token") or ""
+        storage_state = None
+        session_storage: dict[str, Any] = {}
+    else:
+        token = account.get("captured_token") or ""
+        storage_state = account.get("storage_state")
+        session_storage = account.get("session_storage", {})
     return {
         "account_id": account["id"],
         "account_name": account["name"],
         "base_url": account["base_url"],
-        "bearer_token": account.get("bearer_token") or account.get("captured_token") or "",
-        "storage_state": account.get("storage_state"),
-        "session_storage": account.get("session_storage", {}),
+        "bearer_token": token,
+        "storage_state": storage_state,
+        "session_storage": session_storage,
         "extra_headers": account.get("extra_headers", {}),
         "allowed_origins": account.get("allowed_origins", []),
         "variables": account.get("variables", {}),

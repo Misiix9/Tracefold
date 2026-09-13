@@ -9,8 +9,14 @@ Tracefold reads it from:
 https://raw.githubusercontent.com/Misiix9/Tracefold/main/catalog/catalog.json
 ```
 
-The URL is not hardcoded into a release: a team can point Tracefold at its own reviewed
-catalog without waiting for a new application version.
+A team can point Tracefold at its own reviewed catalog without waiting for a new
+application version, by setting `TRACEFOLD_PLUGIN_CATALOG` or writing a `catalog-source`
+file containing the HTTPS address into Tracefold's plugin storage directory.
+
+That override is deliberately **host configuration, not something the application window
+can set**. Checksum verification only proves a package matches the catalog that advertised
+it, so whoever chooses the catalog chooses what is trusted — and that decision belongs to
+the person at the keyboard, not to a page.
 
 ## What Tracefold verifies
 

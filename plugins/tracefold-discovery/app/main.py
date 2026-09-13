@@ -51,8 +51,13 @@ def resolve_data_dir() -> Path:
 DATA = resolve_data_dir()
 LEGACY_DATA = ROOT / "data"
 STANDALONE_DATA = ROOT / ".tracefold"
-# Carry forward data from an earlier standalone install exactly once, without ever
-# overwriting something that already exists in the destination.
+# Carry forward data from an earlier run of this same directory, once, never overwriting
+# anything already in the destination.
+#
+# This only helps a standalone checkout that is later pointed at a data directory. It
+# cannot migrate a previously installed plugin: the host stages the replacement and
+# removes the old plugin directory before this module is imported, so by the time this
+# runs there is nothing left beside the code to carry forward.
 for legacy in (STANDALONE_DATA, LEGACY_DATA):
     if legacy.resolve() == DATA.resolve() or not legacy.exists():
         continue
@@ -313,7 +318,10 @@ def write_export(result: dict[str, Any], format_name: str, kind: str, stem: str)
     EXPORTS.mkdir(parents=True, exist_ok=True)
     safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", stem).strip("-.") or kind
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    destination = EXPORTS / f"{safe_stem}-{stamp}.{format_name}"
+    # Second-level precision alone collides when two reports are saved in the same second,
+    # racing on the temporary file and overwriting one another.
+    unique = uuid.uuid4().hex[:8]
+    destination = EXPORTS / f"{safe_stem}-{stamp}-{unique}.{format_name}"
     temporary = destination.with_name(destination.name + ".part")
     temporary.write_bytes(content)
     temporary.replace(destination)

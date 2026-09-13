@@ -43,8 +43,13 @@ discovery and test runs keep working, and browser login does not.
 
 Everything Discovery stores — settings, accounts, encrypted sessions, test cases, scans,
 test-run results and saved reports — lives in the persistent plugin data directory that
-Tracefold supplies, never inside the installed plugin code. Data from an earlier standalone
-installation is carried over once, and never overwrites anything already present.
+Tracefold supplies, never inside the installed plugin code. Updating the plugin replaces
+only the code, so none of it is touched.
+
+A standalone checkout that is later given a data directory carries its existing `.tracefold`
+folder across once, without overwriting anything already there. Moving data from a
+*separately installed* standalone copy is a manual step: copy its `.tracefold` contents into
+the plugin's data directory while the plugin is stopped.
 
 ## Reports
 

@@ -40,6 +40,23 @@
     return t('Install');
   }
 
+  const TABS = ['installed', 'browse'] as const;
+
+  function onTabKey(event: KeyboardEvent) {
+    const index = TABS.indexOf(tab);
+    let next = index;
+    if (event.key === 'ArrowRight') next = (index + 1) % TABS.length;
+    else if (event.key === 'ArrowLeft') next = (index - 1 + TABS.length) % TABS.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = TABS.length - 1;
+    else return;
+    event.preventDefault();
+    const target = TABS[next];
+    if (target === 'browse') void browse();
+    else tab = target;
+    document.getElementById(`plugins-tab-${target}`)?.focus();
+  }
+
   async function browse() {
     tab = 'browse';
     if (!manager.catalogLoaded && !manager.catalogLoading) await manager.refreshCatalog();
@@ -106,22 +123,28 @@
       <div class="notice" role="status"><Icon name="check" size={16} /> {manager.notification}</div>
     {/if}
 
-    <div class="tabs" role="tablist" aria-label={t('Plugins')}>
+    <div class="tabs" role="tablist" aria-label={t('Plugins')} tabindex="-1" onkeydown={onTabKey}>
       <button
+        id="plugins-tab-installed"
         role="tab"
         class="tab"
         class:selected={tab === 'installed'}
         aria-selected={tab === 'installed'}
+        aria-controls="plugins-panel-installed"
+        tabindex={tab === 'installed' ? 0 : -1}
         onclick={() => (tab = 'installed')}
       >
         {t('Installed')}
         <span class="count">{manager.plugins.length}</span>
       </button>
       <button
+        id="plugins-tab-browse"
         role="tab"
         class="tab"
         class:selected={tab === 'browse'}
         aria-selected={tab === 'browse'}
+        aria-controls="plugins-panel-browse"
+        tabindex={tab === 'browse' ? 0 : -1}
         onclick={() => void browse()}
       >
         {t('Browse')}
@@ -131,7 +154,13 @@
     </div>
 
     {#if tab === 'installed'}
-      <section class="section">
+      <div
+        class="section"
+        id="plugins-panel-installed"
+        role="tabpanel"
+        aria-labelledby="plugins-tab-installed"
+        tabindex="-1"
+      >
         {#if !manager.plugins.length && !manager.loading}
           <div class="empty">
             <Icon name="files" size={30} />
@@ -212,9 +241,15 @@
             {/each}
           </div>
         {/if}
-      </section>
+      </div>
     {:else}
-      <section class="section">
+      <div
+        class="section"
+        id="plugins-panel-browse"
+        role="tabpanel"
+        aria-labelledby="plugins-tab-browse"
+        tabindex="-1"
+      >
         <div class="browse-bar">
           <label class="search">
             <Icon name="search" size={15} />
@@ -340,7 +375,7 @@
             {/if}
           </p>
         {/if}
-      </section>
+      </div>
     {/if}
 
     <section class="section safety">

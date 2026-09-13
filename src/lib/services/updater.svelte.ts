@@ -46,6 +46,7 @@ export class AppUpdater {
 
   private disposed = false;
   private installed = false;
+  private armed = false;
   private timers = new Set<ReturnType<typeof setTimeout>>();
   private lastFocusCheck = 0;
   private failures = 0;
@@ -65,7 +66,7 @@ export class AppUpdater {
   }
 
   private schedule(run: () => void, delay: number) {
-    if (this.disposed) return;
+    if (this.disposed || !this.armed) return;
     const timer = setTimeout(() => {
       this.timers.delete(timer);
       if (!this.disposed) run();
@@ -78,9 +79,13 @@ export class AppUpdater {
    * Checks repeat on a timer and when the window regains focus, and back off on failure.
    */
   startAutomaticChecks(): () => void {
+    this.armed = true;
     const tick = () => {
       void this.check().finally(() => {
-        if (this.disposed || this.readyToRestart) return;
+        if (this.disposed || !this.armed || this.readyToRestart) return;
+        // Only ever one pending check, so a focus-triggered run replaces the timer
+        // rather than racing it.
+        this.stopTimers();
         const delay =
           this.failures > 0
             ? RETRY_DELAYS[Math.min(this.failures, RETRY_DELAYS.length) - 1]
@@ -90,14 +95,17 @@ export class AppUpdater {
     };
     this.schedule(tick, FIRST_CHECK_DELAY);
 
+    // Focus goes through the same path, so a failure there also backs off instead of
+    // waiting out the full hourly interval.
     const onFocus = () => {
       const now = Date.now();
       if (now - this.lastFocusCheck < FOCUS_THROTTLE) return;
       this.lastFocusCheck = now;
-      void this.check();
+      tick();
     };
     if (typeof window !== 'undefined') window.addEventListener('focus', onFocus);
     return () => {
+      this.armed = false;
       if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus);
       this.stopTimers();
     };
@@ -171,7 +179,7 @@ export class AppUpdater {
 
   async install() {
     const update = this.available;
-    if (!update || this.busy || this.disposed) return;
+    if (!update || this.busy || this.prefetching || this.disposed) return;
     this.error = '';
     try {
       if (this.installed) {
@@ -203,12 +211,13 @@ export class AppUpdater {
       this.error = this.installed
         ? 'The update was installed. Close and reopen Tracefold to finish.'
         : 'The update could not finish. Check that your work is saved, then try again.';
-      this.phase = this.downloaded && !this.installed ? 'ready' : 'idle';
+      this.phase = this.downloaded ? 'ready' : 'idle';
     }
   }
 
   async dispose() {
     this.disposed = true;
+    this.armed = false;
     this.prefetching = false;
     this.stopTimers();
     if (!this.busy) await this.available?.close();

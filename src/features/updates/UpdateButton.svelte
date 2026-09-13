@@ -17,12 +17,18 @@
   <button
     class="update-button"
     class:ready={updater.readyToRestart}
-    disabled={updater.busy}
+    disabled={updater.busy || updater.prefetching}
     onclick={() => updater.install()}
     title={t('Version {version}', { version: updater.available.version })}
   >
     <Icon name={updater.readyToRestart ? 'redo' : 'download'} size={18} /><span
-      >{t(updater.readyToRestart ? 'Restart to update' : 'Update to newest version')}</span
+      >{t(
+        updater.prefetching
+          ? 'Preparing update…'
+          : updater.readyToRestart
+            ? 'Restart to update'
+            : 'Update to newest version',
+      )}</span
     >
   </button>
   {#if updater.readyToRestart}<p class="update-hint">

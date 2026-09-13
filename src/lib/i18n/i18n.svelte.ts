@@ -113,6 +113,7 @@ const pluginMessages: Readonly<Record<string, string>> = {
     'A letöltött csomag nem egyezik azzal a katalógusbejegyzéssel, ahonnan származik. Nem lett telepítve.',
   'Refresh the plugin catalog before installing.':
     'Telepítés előtt frissítsd a bővítménykatalógust.',
+  'Preparing update…': 'Frissítés előkészítése…',
   'Restart to update': 'Újraindítás a frissítéshez',
   'Version {version} is ready and installs when you restart.':
     'A(z) {version} verzió készen áll, és újraindításkor települ.',

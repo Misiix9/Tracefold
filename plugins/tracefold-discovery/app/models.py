@@ -71,6 +71,9 @@ class AccountInput(BaseModel):
     password_selector: str = Field(default='input[type="password"]', max_length=500)
     submit_selector: str = Field(default='button[type="submit"]', max_length=500)
     token_storage_key: str = Field(default="", max_length=200)
+    # Opt-in only. Interactive login is where a real password is typed, so certificates
+    # are verified unless the user deliberately accepts an untrusted one.
+    ignore_https_errors: bool = False
     extra_headers: dict[str, str] = Field(default_factory=dict)
     allowed_origins: list[HttpUrl] = Field(default_factory=list, max_length=20)
     variables: dict[str, str | int | float | bool] = Field(default_factory=dict)

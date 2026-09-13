@@ -211,3 +211,68 @@ describe('automatic update checks and background download', () => {
     }
   });
 });
+
+describe('updater lifecycle edges', () => {
+  it('ignores a click while the background download is already running', async () => {
+    const { app, update, provider } = fixture(true);
+    let releaseDownload!: () => void;
+    vi.mocked(update.download).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseDownload = resolve;
+        }),
+    );
+    const checking = app.check();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(app.prefetching).toBe(true);
+
+    // A second download of the same artifact would race the updater's staging.
+    await app.install();
+    expect(update.download).toHaveBeenCalledOnce();
+    expect(provider.prepare).not.toHaveBeenCalled();
+
+    releaseDownload();
+    await checking;
+    expect(app.readyToRestart).toBe(true);
+  });
+
+  it('keeps offering a restart when installation succeeded but relaunching failed', async () => {
+    const { app, provider } = fixture(true);
+    provider.relaunch.mockRejectedValueOnce(new Error('relaunch failed'));
+    await app.check();
+    await app.install();
+    expect(app.error).toContain('was installed');
+    // The bytes are installed; only a restart remains, so the action must say so.
+    expect(app.readyToRestart).toBe(true);
+    expect(app.busy).toBe(false);
+
+    await app.install();
+    expect(provider.relaunch).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops rescheduling when disposed during an in-flight check', async () => {
+    vi.useFakeTimers();
+    try {
+      const { app, provider } = fixture(true);
+      let finishCheck!: (value: null) => void;
+      provider.check.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishCheck = resolve;
+          }),
+      );
+      const stop = app.startAutomaticChecks();
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(provider.check).toHaveBeenCalledTimes(1);
+
+      // Disposing mid-request must not let the settling check arm another timer.
+      stop();
+      finishCheck(null);
+      await vi.advanceTimersByTimeAsync(4 * 60 * 60 * 1000);
+      expect(provider.check).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::io::Read;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -100,21 +101,25 @@ pub struct CatalogResult {
 
 pub struct CatalogService {
     plugins: Arc<PluginRuntime>,
+    /// Where to read a catalog override from. Host-owned: a file Tracefold placed in its
+    /// own application data directory, never anything the webview supplies.
+    root: PathBuf,
     /// The last successfully fetched index. Installs resolve URLs from here, never from
     /// anything the webview passes in.
     cached: Mutex<Option<CatalogIndex>>,
 }
 
 impl CatalogService {
-    pub fn new(plugins: Arc<PluginRuntime>) -> Self {
+    pub fn new(plugins: Arc<PluginRuntime>, root: PathBuf) -> Self {
         Self {
             plugins,
+            root,
             cached: Mutex::new(None),
         }
     }
 
-    pub async fn fetch(&self, source: Option<String>) -> Result<CatalogResult> {
-        let url = normalize_source(source)?;
+    pub async fn fetch(&self) -> Result<CatalogResult> {
+        let url = self.source()?;
         let body = fetch_bytes(&url, MAX_INDEX_BYTES, REQUEST_TIMEOUT).await?;
         let index: CatalogIndex = serde_json::from_slice(&body)
             .map_err(|e| catalog_error("CATALOG_INVALID", format!("The plugin catalog is not valid JSON: {e}")))?;
@@ -240,6 +245,27 @@ fn normalize_source(source: Option<String>) -> Result<String> {
         .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string());
     validate_https_url(&value, "plugin catalog")?;
     Ok(value)
+}
+
+impl CatalogService {
+    /// The catalog address, in order: the `TRACEFOLD_PLUGIN_CATALOG` environment variable,
+    /// then a `catalog-source` file in Tracefold's own plugin storage, then the shipped
+    /// default.
+    ///
+    /// Deliberately never a value from the webview. Checksum verification only proves a
+    /// package matches the catalog that advertised it, so whoever chooses the catalog
+    /// chooses what is trusted — that decision belongs to the host and the person at the
+    /// keyboard, not to a page.
+    fn source(&self) -> Result<String> {
+        if let Ok(value) = std::env::var("TRACEFOLD_PLUGIN_CATALOG") {
+            return normalize_source(Some(value));
+        }
+        let configured = std::fs::read_to_string(self.root.join("catalog-source"))
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        normalize_source(configured)
+    }
 }
 
 fn validate_index(index: &CatalogIndex) -> Result<()> {
@@ -553,5 +579,29 @@ mod tests {
             normalize_source(Some("https://example.com/catalog.json".into())).unwrap(),
             "https://example.com/catalog.json"
         );
+    }
+
+    /// Whoever chooses the catalog chooses what is trusted, because a checksum only proves
+    /// a package matches the catalog that advertised it. The address must therefore come
+    /// from host-owned configuration and never from the webview.
+    #[test]
+    fn the_catalog_address_comes_from_host_configuration_only() {
+        let root = tempfile::tempdir().unwrap();
+        let service = CatalogService::new(
+            Arc::new(PluginRuntime::open(root.path().join("plugins")).unwrap()),
+            root.path().to_path_buf(),
+        );
+        assert_eq!(service.source().unwrap(), DEFAULT_CATALOG_URL);
+
+        std::fs::write(root.path().join("catalog-source"), "  https://example.com/own.json \n").unwrap();
+        assert_eq!(service.source().unwrap(), "https://example.com/own.json");
+
+        // An override still has to be a real HTTPS address.
+        std::fs::write(root.path().join("catalog-source"), "http://example.com/own.json").unwrap();
+        assert!(service.source().is_err());
+
+        // An empty file falls back rather than failing.
+        std::fs::write(root.path().join("catalog-source"), "\n  \n").unwrap();
+        assert_eq!(service.source().unwrap(), DEFAULT_CATALOG_URL);
     }
 }

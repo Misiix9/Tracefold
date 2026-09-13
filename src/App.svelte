@@ -4,9 +4,10 @@
   import { onMount } from 'svelte';
   import { AppUpdater } from './lib/services/updater.svelte';
   import UpdateButton from './features/updates/UpdateButton.svelte';
+  import UpdateDialog from './features/updates/UpdateDialog.svelte';
   import { check } from '@tauri-apps/plugin-updater';
   import { relaunch } from '@tauri-apps/plugin-process';
-  import { isTauri } from '@tauri-apps/api/core';
+  import { invoke, isTauri } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { WorkspaceSearch } from './lib/services/search.svelte';
   import { Workspace } from './lib/services/workspace.svelte';
@@ -25,6 +26,7 @@
   import ReportsView from './features/reports/ReportsView.svelte';
   import TemplatesView from './features/templates/TemplatesView.svelte';
   import PluginsView from './features/plugins/PluginsView.svelte';
+  import PluginHost from './features/plugins/PluginHost.svelte';
   import type { AnyEntity } from './lib/domain/types';
   import { plainText } from './lib/domain/defaults';
   import { captureEvidence, importEvidence } from './features/evidence/evidence';
@@ -32,6 +34,9 @@
   const plugins = new PluginManager();
   const updater = new AppUpdater({
     check: () => check({ timeout: 15000 }),
+    // A conditional request the server answers with 304 when nothing changed, so polling
+    // often costs almost nothing and the update action still appears promptly.
+    probe: () => invoke<boolean>('update_feed_changed'),
     prepare: async () => {
       if (busy || workspace.loading) throw new Error('A workspace operation is still running.');
       await workspace.prepareToClose();
@@ -40,13 +45,25 @@
     },
     relaunch,
   });
+  // Settings are loaded after construction, so apply them as soon as they arrive and
+  // whenever the user changes them.
+  $effect(() => {
+    updater.configure({
+      autoInstall: workspace.settings.autoUpdate,
+      intervalSeconds: workspace.settings.updateCheckSeconds,
+    });
+    plugins.configure({
+      autoUpdatePlugins: workspace.settings.autoUpdatePlugins,
+      intervalSeconds: workspace.settings.pluginCheckSeconds,
+    });
+  });
   onMount(() => {
     if (!isTauri()) return;
-    const initial = setTimeout(() => void updater.check(), 10000);
-    const interval = setInterval(() => void updater.check(), 4 * 60 * 60 * 1000);
+    const stopUpdates = updater.startAutomaticChecks();
+    const stopPluginUpdates = plugins.startAutomaticChecks();
     return () => {
-      clearTimeout(initial);
-      clearInterval(interval);
+      stopUpdates();
+      stopPluginUpdates();
       void updater.dispose();
     };
   });
@@ -70,6 +87,7 @@
     { id: 'plugins', label: t('Plugins'), icon: 'code', kinds: [] },
   ]);
   const current = $derived(navigation.find((n) => n.id === workspace.view)?.label ?? t('Settings'));
+  const hostingPlugin = $derived(workspace.view === 'plugins' && Boolean(plugins.active));
   const searchResults = new WorkspaceSearch(workspace.repo, () => workspace.flush());
   let searchKind = $state<import('./lib/domain/types').EntityKind | ''>('');
   $effect(() => {
@@ -77,14 +95,16 @@
       searchResults.search(workspace.projectId, search, searchKind || undefined);
     else searchResults.clear();
   });
+  const resolvedTheme = $derived(
+    workspace.settings.theme === 'system'
+      ? systemDark
+        ? 'dark'
+        : 'light'
+      : workspace.settings.theme,
+  );
   $effect(() => {
     document.documentElement.lang = workspace.settings.language;
-    document.documentElement.dataset.theme =
-      workspace.settings.theme === 'system'
-        ? systemDark
-          ? 'dark'
-          : 'light'
-        : workspace.settings.theme;
+    document.documentElement.dataset.theme = resolvedTheme;
     document.documentElement.dataset.density = workspace.settings.density;
     document.documentElement.style.setProperty(
       '--editor-size',
@@ -259,6 +279,18 @@
               class="nav-count"
               >{workspace.visible.filter((r) => item.kinds.includes(r.kind)).length}</span
             >{/if}</button
+        >{/each}{#each plugins.plugins.filter((p) => p.running) as plugin (plugin.id)}<button
+          class="nav-item plugin-nav"
+          class:selected={workspace.view === 'plugins' && plugins.active?.plugin.id === plugin.id}
+          title={plugin.name}
+          onclick={() => {
+            workspace.navigate('plugins');
+            void plugins.open(plugin);
+          }}
+          ><Icon name="code" size={19} /><span class="nav-label">{plugin.name}</span><span
+            class="nav-running"
+            aria-label={t('Running')}
+          ></span></button
         >{/each}
     </nav>
     <div class="sidebar-footer">
@@ -313,28 +345,39 @@
           onclick={() => (workspace.error = '')}><Icon name="close" size={16} /></button
         >
       </div>{/if}
-    <main class="workspace-content" id="main-content" tabindex="-1">
-      {#key workspace.projectId}
-        {#if workspace.loading}<EmptyState
-            title={t('Opening your workspace')}
-            description={t('Loading your local notes and projects.')}
+    <main class="workspace-content" class:hosting={hostingPlugin} id="main-content" tabindex="-1">
+      {#if !hostingPlugin}{#key workspace.projectId}
+          {#if workspace.loading}<EmptyState
+              title={t('Opening your workspace')}
+              description={t('Loading your local notes and projects.')}
+            />
+          {:else if workspace.view === 'notebook'}<NotebookView {workspace} />
+          {:else if workspace.view === 'findings'}<FindingsView {workspace} />
+          {:else if workspace.view === 'cases' || workspace.view === 'runs' || workspace.view === 'coverage'}<TestingView
+              {workspace}
+              section={workspace.view}
+            />
+          {:else if workspace.view === 'evidence'}<EvidenceView {workspace} />
+          {:else if workspace.view === 'templates'}<TemplatesView {workspace} />
+          {:else if workspace.view === 'reports'}<ReportsView {workspace} />
+          {:else if workspace.view === 'plugins'}<PluginsView manager={plugins} />
+          {:else}<SettingsView {workspace} {updater} />{/if}
+        {/key}{/if}
+      <!-- Kept mounted while a plugin is running, so leaving and returning to it does not
+           reload the plugin's page and lose whatever the user had open in it. -->
+      {#if plugins.active}
+        <div class="plugin-slot" class:offscreen={!hostingPlugin}>
+          <PluginHost
+            manager={plugins}
+            theme={resolvedTheme}
+            language={workspace.settings.language}
           />
-        {:else if workspace.view === 'notebook'}<NotebookView {workspace} />
-        {:else if workspace.view === 'findings'}<FindingsView {workspace} />
-        {:else if workspace.view === 'cases' || workspace.view === 'runs' || workspace.view === 'coverage'}<TestingView
-            {workspace}
-            section={workspace.view}
-          />
-        {:else if workspace.view === 'evidence'}<EvidenceView {workspace} />
-        {:else if workspace.view === 'templates'}<TemplatesView {workspace} />
-        {:else if workspace.view === 'reports'}<ReportsView {workspace} />
-        {:else if workspace.view === 'plugins'}<PluginsView manager={plugins} />
-        {:else}<SettingsView {workspace} {updater} />{/if}
-      {/key}
+        </div>
+      {/if}
     </main>
   </div>
 </div>
-<UpdateButton {updater} overlay />
+<UpdateDialog {updater} />
 {#if workspace.notification}<div class="toast" role="status">{workspace.notification}</div>{/if}
 <Modal
   bind:open={projectOpen}

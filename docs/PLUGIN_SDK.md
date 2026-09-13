@@ -8,7 +8,42 @@ Tracefold plugins extend the desktop app without putting specialist code inside 
 
 The first runtime is `loopback-web`.
 
-A plugin is an ordinary package containing a root `manifest.json` and an entrypoint. Tracefold installs it under its private application data directory, starts it on `127.0.0.1`, and opens it in a separate Tauri window.
+A plugin is an ordinary package containing a root `manifest.json` and an entrypoint. Tracefold installs it under its private application data directory, starts it on `127.0.0.1`, and displays it inside the main Tracefold window. A running plugin also gets its own sidebar button, and can be opened in a separate window on request.
+
+### Being displayed inside Tracefold
+
+The host loads the plugin's root URL in a frame and appends:
+
+- `tracefoldTheme=light|dark` — the appearance the user is running;
+- `tracefoldLang=hu|en` — the active UI language;
+- `host=tracefold` — the plugin is hosted rather than standalone.
+
+A plugin that supports inline display must allow exactly that embedder and no other:
+
+```
+Content-Security-Policy: ... frame-ancestors 'self' tauri://localhost http://tauri.localhost https://tauri.localhost
+```
+
+It must **not** send `X-Frame-Options`: the header cannot name an allowed embedder, so any
+value blocks the host.
+
+When the user changes theme or language while the plugin is open, the host **posts a
+message** rather than reloading the frame, so nothing in progress is lost:
+
+```js
+window.addEventListener('message', (event) => {
+  if (event.source !== window.parent) return;
+  if (event.data?.type !== 'tracefold:appearance') return;
+  // event.data.theme is 'light' or 'dark'; event.data.language is 'hu' or 'en'
+});
+```
+
+Check `event.source` before acting: only the window that embedded the page may change its
+appearance.
+
+Browser-style downloads do not work in a hosted frame. A plugin that produces files should
+write them into its own data directory and report the path, rather than relying on
+`Content-Disposition`.
 
 The host keeps the plugin URL and allocated port in host-owned runtime state rather than trusting files inside the plugin directory.
 
@@ -29,8 +64,9 @@ Plugin persistent data is stored outside the installed code directory, so replac
   "runtime": {
     "type": "loopback-web",
     "entry": "run.py",
-    "command": "python",
-    "args": ["run.py", "--port", "{port}"],
+    "command": "python3",
+    "commandCandidates": ["python", "py"],
+    "args": ["run.py", "--port", "{port}", "--data-dir", "{dataDir}"],
     "health": "/api/health",
     "bind": "127.0.0.1"
   },
@@ -42,6 +78,10 @@ Plugin persistent data is stored outside the installed code directory, so replac
   }
 }
 ```
+
+`commandCandidates` is optional. When `command` is not found, each candidate is tried in
+order, so one package works where an interpreter is named `python3` on one machine and `py`
+on another.
 
 ## Reserved runtime variables
 
@@ -86,6 +126,27 @@ Plugin authors must:
 - treat all imported target data as untrusted;
 - require confirmation before destructive testing;
 - keep reports free of passwords, cookies, bearer tokens, and private keys.
+
+## Distribution
+
+Two install routes share one verified installer.
+
+A package installed **from the catalog** is downloaded over HTTPS and verified against the
+SHA-256 the catalog records, before any byte reaches plugin storage. Its manifest must also
+declare the same id and version as the catalog entry that advertised it, so a catalog entry
+cannot quietly ship a different plugin. The plugin browser never supplies a URL: it asks for
+an id and version, and the host resolves both against the catalog it fetched itself.
+
+A package installed **from a file** skips only the download and checksum steps; manifest
+validation, package limits and atomic replacement are identical.
+
+Build a package with:
+
+```bash
+node scripts/package-plugin.mjs plugins/<directory> dist-plugins
+```
+
+The archive is deterministic, so rebuilding the same source reproduces the same checksum.
 
 ## Local development
 

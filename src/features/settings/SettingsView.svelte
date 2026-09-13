@@ -144,7 +144,7 @@
       <p>{t('Your workspace, your preferences, your recovery options.')}</p>
     </div>
   </div>
-  {#if workspace.repo.mode === 'desktop'}<UpdateSettings {updater} />{/if}
+  {#if workspace.repo.mode === 'desktop'}<UpdateSettings {updater} {workspace} />{/if}
   <div class="settings-section">
     <div>
       <h2>{t('Appearance')}</h2>

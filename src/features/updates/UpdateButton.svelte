@@ -3,11 +3,12 @@
   import type { AppUpdater } from '../../lib/services/updater.svelte';
   import Icon from '../../lib/ui/Icon.svelte';
   let { updater, overlay = false }: { updater: AppUpdater; overlay?: boolean } = $props();
-  const labels = {
+  const labels: Record<string, string> = {
     preparing: 'Saving work and creating recovery backups…',
     downloading: 'Downloading update…',
     installing: 'Installing update…',
     restarting: 'Restarting Tracefold…',
+    ready: '',
     idle: '',
   };
 </script>
@@ -15,12 +16,26 @@
 {#if updater.available && !overlay}
   <button
     class="update-button"
-    disabled={updater.busy}
+    class:ready={updater.readyToRestart}
+    disabled={updater.busy || updater.prefetching}
     onclick={() => updater.install()}
     title={t('Version {version}', { version: updater.available.version })}
   >
-    <Icon name="download" size={18} /><span>{t('Update to newest version')}</span>
+    <Icon name={updater.readyToRestart ? 'redo' : 'download'} size={18} /><span
+      >{t(
+        updater.prefetching
+          ? 'Preparing update…'
+          : updater.readyToRestart
+            ? 'Restart to update'
+            : 'Update to newest version',
+      )}</span
+    >
   </button>
+  {#if updater.readyToRestart}<p class="update-hint">
+      {t('Version {version} is ready and installs when you restart.', {
+        version: updater.available.version,
+      })}
+    </p>{/if}
 {/if}
 {#if updater.error && !overlay}<p class="update-error" role="alert">{t(updater.error)}</p>{/if}
 {#if updater.busy && overlay}
@@ -59,6 +74,16 @@
   }
   .update-button:hover {
     background: #563a70;
+  }
+  .update-button.ready {
+    background: #54407a;
+    border-color: #8c74ad;
+  }
+  .update-hint {
+    margin: -4px 0 10px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--muted);
   }
   .update-button:disabled {
     cursor: wait;

@@ -1,6 +1,6 @@
 # Implementation ledger
 
-Updated 10 September 2026. This remains an implementation build, not a completed release. The approved contract in PRODUCT_SPEC.md defines completion; the rows below do not reduce that scope.
+Updated 13 September 2026. This remains an implementation build, not a completed release. The approved contract in PRODUCT_SPEC.md defines completion; the rows below do not reduce that scope.
 
 | Requirement | Current evidence | Remaining work |
 |---|---|---|
@@ -19,13 +19,24 @@ Updated 10 September 2026. This remains an implementation build, not a completed
 | PNG sharing boundary | Metadata removal, full scanline reconstruction/re-encoding, transparent RGB clearing and deterministic canonical bytes tested | Pixel-level annotation and every export extraction checks |
 | Backup, trash, history | Streaming full-fidelity backup files, verified independent restoration, interval/daily/weekly retention; native file-dialog round trip preserved private note and 3 revisions | Orphan recovery, trash expiry and additional failure injection |
 | Native app verification | macOS debug .app builds; actual note save/reopen and immediate-close flush verified | Updated capture/evidence/report/import/history flows in packaged app; signed release build |
-| Automated checks | 195 domain/report/updater tests, 2 real editor component tests and 30 native tests pass; Svelte check has zero errors/warnings | Native platform CI and remaining scenario coverage |
+| Automated checks | 215 domain/report/updater/plugin tests, 7 component tests, 51 native tests and 29 Discovery plugin tests pass; Svelte check has zero errors/warnings | Native platform CI and remaining scenario coverage |
 | Performance | Binary evidence/export IPC replaces JSON byte arrays; report fonts load on demand | Measure all launch, memory, typing, navigation and search targets on each supported platform |
 | Platform delivery | macOS ARM64 debug bundle generated locally | macOS Intel, Windows and Linux packages, installers, native runtime checks and signing where credentials are supplied |
 | Documentation | Product/design contracts and this ledger | Architecture, user guide, recovery/format docs and release verification matrix |
 
 No server, account, cloud sync, telemetry, remote asset dependency or shared-project service is implemented in this offline release. Future services are an extension requirement, not an advertised v1 feature.
 
+## Plugin platform (0.2.1)
+
+| Requirement | Current evidence | Remaining work |
+|---|---|---|
+| Plugin catalog | HTTPS-only fetch, schema/URL/checksum validation, SHA-256 verification before install, manifest-must-match-catalog check, id+version resolved host-side; 6 catalog unit tests plus a test that validates the published `catalog/catalog.json` | Publisher signatures, ratings, submission workflow, version history in the browser |
+| Native package install | Rust extraction reusing the staged installer; end-to-end install, hostile-path, mismatched-catalog-entry, malformed-archive and real-package tests | Very large package behaviour measured on each platform |
+| Capability allowlist | Test asserts the registered commands and `permissions/workspace.toml` match exactly; verified to fail against the 0.2.0 defect | — |
+| Inline plugin hosting | Plugin displayed in the main window, sidebar entry for running plugins, theme/language handed to the plugin, CSP `frame-src` limited to loopback | Multi-plugin tabs; host-mediated downloads for plugins that need them |
+| Discovery as a plugin | Loopback-only, data/runtime/Chromium in the persistent plugin directory, framing headers, report writing and reveal-path restriction covered by 29 Python tests; first-launch bootstrap and port handover exercised on Linux | Bootstrap validated on Windows and macOS; interactive login and authenticated crawl re-validated inside the hosted frame |
+| Plugin packaging | Deterministic builder verified byte-identical across rebuilds; catalog drift check; CI packages, tests, rebuilds and verifies before publishing | Package signing |
+
 ## Beta and updater work
 
-Public source/releases authorized. Signed updater implemented with background checks, availability-only purple sidebar action, pending-save flush, project backups, verified download and install/restart. GitHub native build matrix added. Signing private material stays outside the repository and is supplied through an Actions secret. End-to-end update installation and workspace preservation across a real version upgrade remain a release gate. The newest local QA bundle verifies rich-editor navigation, native backup-file restoration, revision recovery, and persistent Hungarian/English menus. Newer report/updater source changes require a refreshed package.
+Public source/releases authorized. Signed updater implemented with automatic checks (post-launch, hourly, on focus, with backoff), quiet background staging of a found release, a restart-to-update sidebar action, pending-save flush, project backups, verified download and silent install/restart. Windows installs without an installer window or elevation. GitHub native build matrix added. Signing private material stays outside the repository and is supplied through an Actions secret. End-to-end update installation and workspace preservation across a real version upgrade remain a release gate. The newest local QA bundle verifies rich-editor navigation, native backup-file restoration, revision recovery, and persistent Hungarian/English menus. Newer report/updater source changes require a refreshed package.

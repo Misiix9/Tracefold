@@ -259,6 +259,14 @@ export interface AppSettings {
   pageSize: 'A4' | 'LETTER';
   backupEnabled: boolean;
   shortcuts: Record<string, string>;
+  /** Install a found release without being asked. */
+  autoUpdate: boolean;
+  /** Keep installed plugins on their newest compatible catalog version. */
+  autoUpdatePlugins: boolean;
+  /** Seconds between release checks. Each poll is a conditional request. */
+  updateCheckSeconds: number;
+  /** Seconds between plugin catalog checks. */
+  pluginCheckSeconds: number;
 }
 export interface Asset {
   id: string;

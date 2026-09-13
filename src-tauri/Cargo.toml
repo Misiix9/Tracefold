@@ -1,6 +1,6 @@
 [package]
 name = "tracefold"
-version = "0.2.0"
+version = "0.2.1"
 description = "Offline Tracefold workspace with a trusted local plugin platform"
 edition = "2021"
 rust-version = "1.89"
@@ -25,6 +25,10 @@ tempfile = "3"
 percent-encoding = "2"
 tauri-plugin-updater = "2.11.0"
 tauri-plugin-process = "2.3.1"
+# Catalog downloads reuse the updater's TLS stack instead of adding a second one.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "system-proxy"] }
+rustls = { version = "0.23", features = ["ring"] }
+zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 libc = "0.2"

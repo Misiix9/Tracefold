@@ -1,0 +1,113 @@
+name: Plugin packages
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ['plugin-*']
+permissions:
+  contents: read
+concurrency:
+  group: plugins-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: true
+jobs:
+  package:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Test the Discovery plugin
+        working-directory: plugins/tracefold-discovery
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest pytest-asyncio
+          python -m pytest -q
+
+      - name: Build plugin packages
+        run: node scripts/package-plugin.mjs plugins/tracefold-discovery dist-plugins
+
+      # A published checksum is a promise that a specific artifact will verify. If the
+      # source no longer reproduces it, that only surfaces as a failed install for users.
+      - name: Verify the catalog matches the built packages
+        run: node scripts/build-catalog.mjs --check dist-plugins
+
+      - name: Confirm the package builds reproducibly
+        run: |
+          node scripts/package-plugin.mjs plugins/tracefold-discovery dist-plugins-again
+          for file in dist-plugins/*.tracefold-plugin; do
+            name="$(basename "$file")"
+            if ! cmp -s "$file" "dist-plugins-again/$name"; then
+              echo "::error::$name is not reproducible between builds"
+              exit 1
+            fi
+          done
+          echo "All packages rebuilt byte-for-byte identically."
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tracefold-plugins
+          if-no-files-found: error
+          retention-days: 14
+          path: dist-plugins/*
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/plugin-')
+    needs: package
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: tracefold-plugins
+          path: dist-plugins
+
+      # The catalog entry already names this tag and this checksum, so the asset published
+      # here has to be exactly the one the catalog promises.
+      - name: Confirm the tag matches a catalog entry
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module -e '
+            import { readFile, readdir } from "node:fs/promises";
+            import { createHash } from "node:crypto";
+            const tag = process.env.RELEASE_TAG;
+            const catalog = JSON.parse(await readFile("catalog/catalog.json", "utf8"));
+            const entries = catalog.plugins.flatMap((plugin) =>
+              plugin.versions.map((version) => ({ id: plugin.id, ...version })),
+            );
+            const entry = entries.find((candidate) => candidate.url.includes(`/download/${tag}/`));
+            if (!entry) throw new Error(`No catalog entry publishes under tag ${tag}.`);
+            const file = decodeURIComponent(entry.url.split("/").pop());
+            const names = await readdir("dist-plugins");
+            if (!names.includes(file)) throw new Error(`${file} was not built.`);
+            const bytes = await readFile(`dist-plugins/${file}`);
+            const sha256 = createHash("sha256").update(bytes).digest("hex");
+            if (sha256 !== entry.sha256) {
+              throw new Error(`${file} is ${sha256}, but the catalog promises ${entry.sha256}.`);
+            }
+            console.log(`${entry.id} ${entry.version} verified: ${sha256}`);
+          '
+
+      - name: Publish the plugin package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; refusing to replace a published package."
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" --verify-tag --draft \
+            --title "Tracefold plugin $RELEASE_TAG" \
+            --notes "Plugin package published for the Tracefold plugin catalog." \
+            dist-plugins/*.tracefold-plugin
+          gh release edit "$RELEASE_TAG" --draft=false

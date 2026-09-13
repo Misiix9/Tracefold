@@ -42,6 +42,10 @@ export const defaultSettings: AppSettings = {
   author: '',
   pageSize: 'A4',
   backupEnabled: true,
+  autoUpdate: true,
+  autoUpdatePlugins: true,
+  updateCheckSeconds: 60,
+  pluginCheckSeconds: 900,
   shortcuts: {},
 };
 export const newId = () => crypto.randomUUID();

@@ -2,16 +2,17 @@
   "schema": "tracefold.plugin.v1",
   "id": "tracefold.discovery",
   "name": "Tracefold Discovery",
-  "version": "2.1.1",
+  "version": "2.1.0",
   "publisher": "Tracefold",
-  "description": "Authenticated website and API discovery with multi-user authorization testing.",
+  "description": "Authenticated website and API discovery with multi-user authorization testing. Crawls as a saved user, maps API calls to the pages that make them, and compares endpoint access across accounts.",
   "apiVersion": 1,
-  "minTracefoldVersion": "0.2.0",
+  "minTracefoldVersion": "0.2.1",
   "runtime": {
     "type": "loopback-web",
     "entry": "run.py",
-    "command": "python",
-    "args": ["run.py", "--port", "{port}"],
+    "command": "python3",
+    "commandCandidates": ["python", "py"],
+    "args": ["run.py", "--port", "{port}", "--data-dir", "{dataDir}"],
     "health": "/api/health",
     "bind": "127.0.0.1"
   },
@@ -22,12 +23,8 @@
     "local.files.app-data"
   ],
   "dataPolicy": {
-    "persistentDirectory": ".tracefold",
+    "persistentDirectory": "{dataDir}",
     "telemetry": false,
     "accountRequired": false
-  },
-  "updates": {
-    "channel": "stable",
-    "artifact": "tracefold-discovery"
   }
 }

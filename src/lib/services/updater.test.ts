@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AppUpdater, type AvailableUpdate } from './updater.svelte';
-function fixture() {
+function fixture(autoDownload = false) {
   const update: AvailableUpdate = {
     version: '0.2.0',
     download: vi.fn().mockResolvedValue(undefined),
@@ -12,7 +12,7 @@ function fixture() {
     prepare: vi.fn().mockResolvedValue(undefined),
     relaunch: vi.fn().mockResolvedValue(undefined),
   };
-  return { update, provider, app: new AppUpdater(provider) };
+  return { update, provider, app: new AppUpdater(provider, autoDownload) };
 }
 describe('in-app updater', () => {
   it('stays hidden without a newer release and tolerates offline checks', async () => {
@@ -26,7 +26,7 @@ describe('in-app updater', () => {
     expect(app.busy).toBe(false);
     expect(app.error).toBe('');
   });
-  it('saves and backs up before downloading, then installs and restarts in order', async () => {
+  it('downloads, then saves and backs up before installing and restarting', async () => {
     const { app, update, provider } = fixture();
     const order: string[] = [];
     provider.prepare.mockImplementation(async () => {
@@ -46,17 +46,19 @@ describe('in-app updater', () => {
     await app.check();
     expect(app.available?.version).toBe('0.2.0');
     await app.install();
-    expect(order).toEqual(['backup', 'download', 'install', 'restart']);
+    expect(order).toEqual(['download', 'backup', 'install', 'restart']);
     expect(app.received).toBe(80);
     expect(app.total).toBe(100);
   });
-  it('does not download or install if pending work cannot be backed up', async () => {
+  it('never installs if pending work cannot be backed up, and leaves the app usable', async () => {
     const { app, update, provider } = fixture();
     provider.prepare.mockRejectedValue(new Error('disk full'));
     await app.check();
     await app.install();
-    expect(update.download).not.toHaveBeenCalled();
+    // Downloading only writes a temporary file, so it is allowed to have happened.
+    // Replacing the installed application is not.
     expect(update.install).not.toHaveBeenCalled();
+    expect(provider.relaunch).not.toHaveBeenCalled();
     expect(app.busy).toBe(false);
     expect(app.error).toContain('could not finish');
   });
@@ -83,6 +85,9 @@ describe('in-app updater', () => {
     await app.check();
     const operation = app.install();
     await app.install();
+    // The first install is parked inside prepare(); the second must not have started one.
+    await Promise.resolve();
+    await Promise.resolve();
     expect(provider.prepare).toHaveBeenCalledOnce();
     ready();
     await operation;
@@ -132,5 +137,242 @@ describe('in-app updater', () => {
     expect(next.close).toHaveBeenCalledOnce();
     finishPrepare();
     await installing;
+  });
+});
+
+describe('automatic update checks and background download', () => {
+  it('downloads a found update in the background without raising the blocking overlay', async () => {
+    const { app, update, provider } = fixture(true);
+    await app.check();
+    expect(provider.check).toHaveBeenCalledOnce();
+    expect(update.download).toHaveBeenCalledOnce();
+    expect(update.install).not.toHaveBeenCalled();
+    expect(provider.prepare).not.toHaveBeenCalled();
+    // Nothing was interrupted: no overlay, no restart, work continues.
+    expect(app.busy).toBe(false);
+    expect(app.readyToRestart).toBe(true);
+    expect(app.phase).toBe('ready');
+  });
+
+  it('installs immediately on restart without downloading a second time', async () => {
+    const { app, update, provider } = fixture(true);
+    await app.check();
+    await app.install();
+    expect(update.download).toHaveBeenCalledOnce();
+    expect(provider.prepare).toHaveBeenCalledOnce();
+    expect(update.install).toHaveBeenCalledOnce();
+    expect(provider.relaunch).toHaveBeenCalledOnce();
+  });
+
+  it('keeps offering the update when the background download fails, and retries on click', async () => {
+    const { app, update, provider } = fixture(true);
+    vi.mocked(update.download).mockRejectedValueOnce(new Error('connection reset'));
+    await app.check();
+    expect(app.available).toBe(update);
+    expect(app.readyToRestart).toBe(false);
+    expect(app.busy).toBe(false);
+    // A silent prefetch failure must not surface as an error the user has to dismiss.
+    expect(app.error).toBe('');
+
+    await app.install();
+    expect(update.download).toHaveBeenCalledTimes(2);
+    expect(update.install).toHaveBeenCalledOnce();
+  });
+
+  it('stops checking once an update is staged, and resumes nothing after disposal', async () => {
+    const { app, provider } = fixture(true);
+    await app.check();
+    expect(app.readyToRestart).toBe(true);
+    await app.check();
+    expect(provider.check).toHaveBeenCalledOnce();
+  });
+
+  it('checks on a timer, backs off after a failure, and stops when disposed', async () => {
+    vi.useFakeTimers();
+    try {
+      const { app, provider } = fixture(true);
+      provider.check.mockRejectedValue(new Error('offline'));
+      const stop = app.startAutomaticChecks();
+
+      expect(provider.check).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(provider.check).toHaveBeenCalledTimes(1);
+      expect(app.checkStatus).toBe('unavailable');
+
+      // A failed check retries sooner than the hourly cadence instead of waiting an hour.
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+      expect(provider.check).toHaveBeenCalledTimes(2);
+
+      stop();
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+      expect(provider.check).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('updater lifecycle edges', () => {
+  it('ignores a click while the background download is already running', async () => {
+    const { app, update, provider } = fixture(true);
+    let releaseDownload!: () => void;
+    vi.mocked(update.download).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseDownload = resolve;
+        }),
+    );
+    const checking = app.check();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(app.prefetching).toBe(true);
+
+    // A second download of the same artifact would race the updater's staging.
+    await app.install();
+    expect(update.download).toHaveBeenCalledOnce();
+    expect(provider.prepare).not.toHaveBeenCalled();
+
+    releaseDownload();
+    await checking;
+    expect(app.readyToRestart).toBe(true);
+  });
+
+  it('keeps offering a restart when installation succeeded but relaunching failed', async () => {
+    const { app, provider } = fixture(true);
+    provider.relaunch.mockRejectedValueOnce(new Error('relaunch failed'));
+    await app.check();
+    await app.install();
+    expect(app.error).toContain('was installed');
+    // The bytes are installed; only a restart remains, so the action must say so.
+    expect(app.readyToRestart).toBe(true);
+    expect(app.busy).toBe(false);
+
+    await app.install();
+    expect(provider.relaunch).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops rescheduling when disposed during an in-flight check', async () => {
+    vi.useFakeTimers();
+    try {
+      const { app, provider } = fixture(true);
+      let finishCheck!: (value: null) => void;
+      provider.check.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishCheck = resolve;
+          }),
+      );
+      const stop = app.startAutomaticChecks();
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(provider.check).toHaveBeenCalledTimes(1);
+
+      // Disposing mid-request must not let the settling check arm another timer.
+      stop();
+      finishCheck(null);
+      await vi.advanceTimersByTimeAsync(4 * 60 * 60 * 1000);
+      expect(provider.check).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('cheap polling and automatic installation', () => {
+  it('skips the full check while the probe reports the feed is unchanged', async () => {
+    vi.useFakeTimers();
+    try {
+      const { app, provider } = fixture(true);
+      const probe = vi.fn().mockResolvedValue(false);
+      (provider as { probe?: () => Promise<boolean> }).probe = probe;
+
+      const stop = app.startAutomaticChecks();
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3 * 60 * 1000);
+
+      // Several polls, none of which cost a fetch-and-parse.
+      expect(probe.mock.calls.length).toBeGreaterThan(2);
+      expect(provider.check).not.toHaveBeenCalled();
+      expect(app.lastCheckedAt).not.toBe('');
+
+      // Once the feed moves, the real check runs.
+      probe.mockResolvedValue(true);
+      await vi.advanceTimersByTimeAsync(60 * 1000);
+      expect(provider.check).toHaveBeenCalled();
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still checks when the probe itself fails, rather than missing an update', async () => {
+    const { app, provider } = fixture(true);
+    (provider as { probe?: () => Promise<boolean> }).probe = vi
+      .fn()
+      .mockRejectedValue(new Error('probe blew up'));
+    await app.check();
+    expect(provider.check).toHaveBeenCalledOnce();
+  });
+
+  it('installs unattended at startup when automatic updates are on', async () => {
+    vi.useFakeTimers();
+    try {
+      const { app, update, provider } = fixture();
+      app.configure({ autoDownload: true, autoInstall: true });
+      const stop = app.startAutomaticChecks();
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(update.download).toHaveBeenCalledOnce();
+      expect(provider.prepare).toHaveBeenCalledOnce();
+      expect(update.install).toHaveBeenCalledOnce();
+      expect(provider.relaunch).toHaveBeenCalledOnce();
+      expect(app.restartPrompt).toBe(false);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('asks before restarting once the session is under way', async () => {
+    vi.useFakeTimers();
+    try {
+      const { app, update, provider } = fixture();
+      app.configure({ autoDownload: true, autoInstall: true, intervalSeconds: 60 });
+      const stop = app.startAutomaticChecks();
+
+      // Past the startup window: someone may be mid-sentence, so it must not restart.
+      provider.check.mockResolvedValueOnce(null);
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(90_000);
+
+      expect(app.restartPrompt).toBe(true);
+      expect(app.readyToRestart).toBe(true);
+      expect(update.install).not.toHaveBeenCalled();
+      expect(provider.relaunch).not.toHaveBeenCalled();
+
+      app.postpone();
+      expect(app.restartPrompt).toBe(false);
+      // Postponing keeps the staged update; it is applied on the next restart.
+      expect(app.readyToRestart).toBe(true);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never installs unattended when automatic updates are off', async () => {
+    vi.useFakeTimers();
+    try {
+      const { app, update, provider } = fixture(true);
+      const stop = app.startAutomaticChecks();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(update.download).toHaveBeenCalledOnce();
+      expect(update.install).not.toHaveBeenCalled();
+      expect(provider.relaunch).not.toHaveBeenCalled();
+      expect(app.restartPrompt).toBe(false);
+      expect(app.readyToRestart).toBe(true);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

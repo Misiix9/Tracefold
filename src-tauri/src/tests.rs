@@ -456,3 +456,97 @@ fn imported_backup_rejects_unexpected_schema_even_with_matching_checksum() {
     );
     assert_eq!(workspace.list_projects().unwrap().len(), 1);
 }
+
+/// The capability allowlist and the invoke handler drift silently: a command that is
+/// registered but not allowed fails only at runtime, in a packaged build. v0.2.0 shipped
+/// with the streaming plugin installer unreachable for exactly that reason.
+#[test]
+fn every_registered_command_is_permitted() {
+    const LIB: &str = include_str!("lib.rs");
+    const PERMISSIONS: &str = include_str!("../permissions/workspace.toml");
+
+    let handler = LIB
+        .split_once("tauri::generate_handler![")
+        .expect("lib.rs must register an invoke handler")
+        .1
+        .split_once(']')
+        .expect("the invoke handler list must be closed")
+        .0;
+    let registered: Vec<&str> = handler
+        .split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .collect();
+
+    let allowed_line = PERMISSIONS
+        .lines()
+        .find(|line| line.starts_with("commands.allow"))
+        .expect("the workspace permission must declare commands.allow");
+    let allowed: Vec<&str> = allowed_line
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .collect();
+
+    assert!(!registered.is_empty(), "no commands were parsed from lib.rs");
+    for command in &registered {
+        assert!(
+            allowed.contains(command),
+            "command `{command}` is registered but missing from permissions/workspace.toml"
+        );
+    }
+    for command in &allowed {
+        assert!(
+            registered.contains(command),
+            "permissions/workspace.toml allows `{command}`, which is not a registered command"
+        );
+    }
+}
+
+/// Settings written by 0.2.0 must still load. A missing field that is not defaulted makes
+/// deserialization fail, which would silently reset every preference on upgrade.
+#[test]
+fn settings_saved_by_an_older_version_still_load() {
+    let stored = json!({
+        "language": "hu",
+        "theme": "dark",
+        "density": "comfortable",
+        "editorFontSize": 15,
+        "lastProjectId": null,
+        "lastView": "notebook",
+        "onboardingComplete": true,
+        "author": "Tester",
+        "pageSize": "A4",
+        "backupEnabled": true,
+        "shortcuts": {}
+    });
+    let settings: AppSettings = serde_json::from_value(stored).expect("older settings must load");
+    assert_eq!(settings.author, "Tester");
+    assert_eq!(settings.theme, "dark");
+    assert!(settings.auto_update, "automatic updates default to on");
+    assert!(settings.auto_update_plugins);
+    assert_eq!(settings.update_check_seconds, crate::model::DEFAULT_UPDATE_CHECK_SECONDS);
+    assert_eq!(settings.plugin_check_seconds, crate::model::DEFAULT_PLUGIN_CHECK_SECONDS);
+}
+
+#[test]
+fn check_intervals_are_bounded() {
+    let (_dir, workspace, _project) = fixture();
+    let mut settings = workspace.get_settings().unwrap();
+
+    settings.update_check_seconds = 1;
+    assert!(workspace.save_settings(settings.clone()).is_err());
+
+    settings.update_check_seconds = crate::model::MAX_CHECK_SECONDS + 1;
+    assert!(workspace.save_settings(settings.clone()).is_err());
+
+    settings.update_check_seconds = 60;
+    settings.plugin_check_seconds = 5;
+    assert!(workspace.save_settings(settings.clone()).is_err());
+
+    settings.plugin_check_seconds = 900;
+    workspace.save_settings(settings).unwrap();
+    let saved = workspace.get_settings().unwrap();
+    assert_eq!(saved.update_check_seconds, 60);
+    assert_eq!(saved.plugin_check_seconds, 900);
+}

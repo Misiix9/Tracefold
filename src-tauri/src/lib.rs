@@ -1,5 +1,6 @@
 mod backup;
 mod capture;
+mod catalog;
 mod error;
 mod files;
 mod import;
@@ -11,6 +12,8 @@ mod store;
 #[cfg(test)]
 mod tests;
 mod transport;
+mod updates;
+use catalog::CatalogService;
 use error::{AppError, Result};
 use model::*;
 use plugin_manager::{PluginInfo, PluginRuntime};
@@ -140,39 +143,43 @@ async fn plugin_blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T> + Send
 #[tauri::command]
 fn list_plugins(state: State<'_, Arc<PluginRuntime>>) -> Result<Vec<PluginInfo>> { state.list() }
 
+/// Picking, reading, unpacking and installing all happen in Rust. The archive never
+/// crosses the IPC boundary, so a 256 MiB package costs one file read instead of a
+/// webview-sized copy of itself.
 #[tauri::command]
-async fn pick_plugin_archive(app: tauri::AppHandle) -> Result<tauri::ipc::Response> {
-    let bytes = plugin_blocking(move || plugin_manager::pick_plugin_archive(&app)).await?;
-    Ok(tauri::ipc::Response::new(bytes))
+async fn install_plugin_from_file(app: tauri::AppHandle, state: State<'_, Arc<PluginRuntime>>) -> Result<Option<PluginInfo>> {
+    let runtime = Arc::clone(state.inner());
+    let picker = app.clone();
+    let installed = plugin_blocking(move || {
+        let archive = plugin_manager::pick_plugin_archive(&picker)?;
+        if archive.is_empty() {
+            return Ok(None);
+        }
+        plugin_manager::install_package_bytes(&runtime, &archive, None).map(Some)
+    })
+    .await?;
+    if let Some(info) = &installed {
+        close_plugin_window(&app, &info.id);
+    }
+    Ok(installed)
+}
+
+/// A cheap conditional probe. The full check only runs when this says the feed moved.
+#[tauri::command]
+async fn update_feed_changed(state: State<'_, Arc<updates::FeedWatcher>>) -> Result<bool> {
+    state.changed().await
 }
 
 #[tauri::command]
-async fn begin_plugin_install(state: State<'_, Arc<PluginRuntime>>) -> Result<String> {
-    let runtime = Arc::clone(state.inner());
-    plugin_blocking(move || runtime.begin_install()).await
+async fn fetch_plugin_catalog(state: State<'_, Arc<CatalogService>>) -> Result<catalog::CatalogResult> {
+    state.fetch().await
 }
 
 #[tauri::command]
-async fn append_plugin_file(state: State<'_, Arc<PluginRuntime>>, request: tauri::ipc::Request<'_>) -> Result<()> {
-    let install_id = transport::header(&request, "x-plugin-install-id")?;
-    let path = transport::header(&request, "x-plugin-path")?;
-    let bytes = transport::bytes(&request, 64 * 1024 * 1024)?;
-    let runtime = Arc::clone(state.inner());
-    plugin_blocking(move || runtime.append_install_file(&install_id, &path, bytes)).await
-}
-
-#[tauri::command]
-async fn finalize_plugin_install(app: tauri::AppHandle, state: State<'_, Arc<PluginRuntime>>, install_id: String) -> Result<PluginInfo> {
-    let runtime = Arc::clone(state.inner());
-    let info = plugin_blocking(move || runtime.finalize_install(&install_id)).await?;
+async fn install_catalog_plugin(app: tauri::AppHandle, state: State<'_, Arc<CatalogService>>, id: String, version: String) -> Result<PluginInfo> {
+    let info = state.install(&id, &version).await?;
     close_plugin_window(&app, &info.id);
     Ok(info)
-}
-
-#[tauri::command]
-async fn abort_plugin_install(state: State<'_, Arc<PluginRuntime>>, install_id: String) -> Result<()> {
-    let runtime = Arc::clone(state.inner());
-    plugin_blocking(move || runtime.abort_install(&install_id)).await
 }
 
 #[tauri::command]
@@ -194,6 +201,14 @@ async fn stop_plugin(app: tauri::AppHandle, state: State<'_, Arc<PluginRuntime>>
     close_plugin_window(&app, &id);
     let runtime = Arc::clone(state.inner());
     plugin_blocking(move || runtime.stop(&id)).await
+}
+
+/// Start a plugin and hand back its loopback URL so the main window can host it inline.
+/// The URL comes from host-owned runtime state, never from the plugin directory.
+#[tauri::command]
+async fn start_plugin(state: State<'_, Arc<PluginRuntime>>, id: String) -> Result<String> {
+    let runtime = Arc::clone(state.inner());
+    plugin_blocking(move || runtime.start(&id)).await
 }
 
 #[tauri::command]
@@ -236,9 +251,12 @@ pub fn run() {
             let root = app.path().app_local_data_dir()?;
             let workspace = store::Workspace::open(&root)?;
             let language = workspace.get_settings()?.language;
-            let plugins = PluginRuntime::open(root.join("plugins"))?;
+            let plugin_root = root.join("plugins");
+            let plugins = Arc::new(PluginRuntime::open(plugin_root.clone())?);
             app.manage(Arc::new(Mutex::new(workspace)));
-            app.manage(Arc::new(plugins));
+            app.manage(Arc::new(CatalogService::new(Arc::clone(&plugins), plugin_root)));
+            app.manage(Arc::new(updates::FeedWatcher::new()));
+            app.manage(plugins);
             menus::apply(app.handle(), &language)?;
             Ok(())
         })
@@ -247,8 +265,8 @@ pub fn run() {
             restore_record, get_revisions, get_settings, save_settings, import_asset, read_asset,
             capture_capabilities, capture_screen, save_file, create_backup, list_backups, restore_backup,
             export_backup_file, restore_backup_file, storage_info, import_project, list_plugins,
-            pick_plugin_archive, begin_plugin_install, append_plugin_file, finalize_plugin_install,
-            abort_plugin_install, set_plugin_enabled, remove_plugin, stop_plugin, launch_plugin
+            install_plugin_from_file, fetch_plugin_catalog, install_catalog_plugin, update_feed_changed,
+            set_plugin_enabled, remove_plugin, stop_plugin, start_plugin, launch_plugin
         ])
         .build(tauri::generate_context!())
         .expect("Tracefold could not start")

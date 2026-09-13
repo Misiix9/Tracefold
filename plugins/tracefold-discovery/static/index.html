@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tracefold Discovery</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/theme.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div><strong>Tracefold</strong><small>Discovery</small></div>
+      </div>
+
+      <nav class="app-nav" aria-label="Main navigation">
+        <button class="nav-item active" data-view="discovery" type="button"><span>⌁</span> Discovery</button>
+        <button class="nav-item" data-view="testing" type="button"><span>✓</span> Test runner</button>
+        <button class="nav-item" data-view="accounts" type="button"><span>◎</span> Accounts</button>
+      </nav>
+
+      <section id="discovery-controls" class="side-controls">
+        <p class="side-label">SCAN SETTINGS</p>
+        <form id="scan-form" autocomplete="off">
+          <label class="field"><span>Target website</span><input id="target-url" type="url" placeholder="https://uat.example.com" required spellcheck="false"></label>
+          <label class="field"><span>Saved account <em>optional</em></span><select id="discovery-account"><option value="">No saved account</option></select><small>A saved Playwright session includes cookies and browser storage.</small></label>
+          <label id="discovery-token-field" class="field"><span>Bearer token <em>optional</em></span><div class="secret-wrap"><input id="bearer-token" type="password" placeholder="Paste token without Bearer" spellcheck="false" autocomplete="new-password"><button class="icon-button toggle-secret" type="button">Show</button></div></label>
+          <div class="checks">
+            <label><input id="safe-probing" type="checkbox" checked><span>Safe endpoint checks</span></label>
+            <label><input id="openapi" type="checkbox" checked><span>Find OpenAPI documents</span></label>
+            <label><input id="subdomains" type="checkbox"><span>Include subdomains</span></label>
+            <label><input id="ignore-tls" type="checkbox"><span>Ignore TLS errors</span></label>
+          </div>
+          <details class="advanced">
+            <summary>Advanced settings <span>+</span></summary>
+            <div class="advanced-grid">
+              <label class="field compact"><span>Page limit</span><input id="max-pages" type="number" value="50" min="1" max="500"></label>
+              <label class="field compact"><span>Max depth</span><input id="max-depth" type="number" value="5" min="0" max="20"></label>
+              <label class="field compact"><span>Delay, ms</span><input id="delay" type="number" value="150" min="0" max="10000"></label>
+              <label class="field compact"><span>Timeout, ms</span><input id="timeout" type="number" value="20000" min="2000" max="120000"></label>
+            </div>
+            <label class="field"><span>Extra headers <em>JSON</em></span><textarea id="extra-headers" rows="3" placeholder='{"X-Tenant-ID":"value"}' spellcheck="false"></textarea></label>
+            <div class="route-budget-card"><div><strong>Dynamic route deduplication</strong><small>One representative page is scanned for each route shape such as <code>/cmdb/entity-types/{id}/index</code>.</small></div><div class="advanced-grid"><label class="field compact"><span>Variants / route</span><input id="max-route-variants" type="number" value="1" min="1" max="25"></label><label class="switch-row compact-switch"><input id="normalize-dynamic-ids" type="checkbox" checked><span><strong>Detect IDs</strong><small>UUIDs, numbers, ULIDs, opaque IDs</small></span></label><label class="switch-row compact-switch"><input id="normalize-query-values" type="checkbox" checked><span><strong>Normalize query values</strong><small>Keep parameter names, collapse changing values</small></span></label></div><label class="field"><span>Custom ID regexes <em>one per line</em></span><textarea id="custom-id-patterns" rows="3" placeholder="^DAM\d+$"></textarea></label><label class="field"><span>Ignore path regexes <em>one per line</em></span><textarea id="ignore-path-patterns" rows="3" placeholder="^/static/|/downloads/"></textarea></label></div>
+            <div class="danger-zone">
+              <label class="danger-check"><input id="mutation-probing" type="checkbox"><span><strong>Send mutating requests</strong><small>Allows POST, PUT, PATCH, and DELETE probes.</small></span></label>
+              <div id="mutation-confirm" class="hidden"><p>This may change UAT data.</p><label class="field compact"><span>Type <code>I AM AUTHORIZED</code></span><input id="authorization-confirmation" type="text" spellcheck="false"></label></div>
+            </div>
+          </details>
+          <button id="start-button" class="primary-button" type="submit"><span class="button-dot"></span>Start discovery scan</button>
+          <button id="cancel-button" class="secondary-button hidden" type="button">Cancel scan</button>
+        </form>
+      </section>
+
+      <div class="side-help">
+        <strong>Session-aware scanning</strong>
+        <p>Save each test user under Accounts. Tracefold can then crawl the site exactly as that user.</p>
+      </div>
+      <footer><span class="status-dot"></span>Runs only on this computer</footer>
+    </aside>
+
+    <main class="main">
+      <section id="discovery-view" class="app-view">
+        <header class="topbar">
+          <div><p class="eyebrow">API SURFACE MAP</p><h1>See where every request begins.</h1></div>
+          <div id="export-menu" class="export-group hidden"><a id="export-json" class="export-button" href="#">JSON</a><a id="export-csv" class="export-button" href="#">CSV</a><a id="export-xlsx" class="export-button accent" href="#">Excel</a></div>
+        </header>
+        <section id="empty-state" class="empty-state">
+          <div class="map-visual" aria-hidden="true"><span class="map-node n1"></span><span class="map-node n2"></span><span class="map-node n3"></span><span class="map-node n4"></span><span class="map-node n5"></span><svg viewBox="0 0 520 260" role="presentation"><path d="M80 55 C160 55 120 135 225 135 S310 210 440 210"/><path d="M80 55 C155 55 190 54 260 54 S350 100 440 100"/><path d="M225 135 C270 135 300 100 440 100"/></svg></div>
+          <h2>Map authenticated frontend traffic</h2><p>Capture browser calls, scan exact JavaScript paths, inspect payloads, and trace each API back to its pages.</p>
+          <div class="feature-pills"><span>Cookies</span><span>Local storage</span><span>Exact casing</span><span>Called-from map</span></div>
+        </section>
+        <section id="scan-progress" class="progress-card hidden">
+          <div class="progress-heading"><div><p class="eyebrow">SCANNING</p><h2 id="phase-label">Preparing browser</h2></div><span id="progress-number">0%</span></div>
+          <div class="progress-track"><span id="progress-bar"></span></div>
+          <div class="progress-stats"><div><strong id="live-pages">0</strong><span>pages visited</span></div><div><strong id="live-endpoints">0</strong><span>endpoints found</span></div><div><strong id="elapsed-time">00:00</strong><span>elapsed</span></div></div>
+          <div class="scan-note"><span class="spinner"></span><span>Keep this window open while the scan runs.</span></div>
+        </section>
+        <section id="results" class="results hidden">
+          <div class="summary-grid"><article><span>Endpoints</span><strong id="stat-endpoints">0</strong><small id="stat-runtime">0 seen live</small></article><article><span>Pages</span><strong id="stat-pages">0</strong><small id="stat-errors">0 crawl errors</small></article><article><span>Payloads</span><strong id="stat-payloads">0</strong><small>observed or inferred</small></article><article><span>Methods</span><strong id="stat-methods">0</strong><small>distinct HTTP verbs</small></article><article><span>Route shapes</span><strong id="stat-routes">0</strong><small id="stat-skipped">0 variants skipped</small></article></div>
+          <div class="result-card">
+            <div class="tabs"><button class="tab active" data-tab="endpoints" type="button">Endpoints</button><button class="tab" data-tab="pages" type="button">Pages</button><button class="tab" data-tab="issues" type="button">Issues <span id="issue-count">0</span></button></div>
+            <div id="endpoints-panel" class="tab-panel"><div class="toolbar"><label class="search-box"><span>⌕</span><input id="endpoint-search" type="search" placeholder="Search exact paths, pages, or source files"></label><select id="method-filter"><option value="">All methods</option></select><select id="source-filter"><option value="">All sources</option><option value="runtime">Seen live</option><option value="javascript">JavaScript</option><option value="openapi">OpenAPI</option></select><span id="result-count" class="result-count"></span></div><div class="table-wrap"><table><thead><tr><th>Method</th><th>Exact endpoint</th><th>Status</th><th>Payload</th><th>Found through</th><th>Called from</th><th></th></tr></thead><tbody id="endpoint-rows"></tbody></table></div><div id="no-results" class="no-results hidden">No endpoints match these filters.</div></div>
+            <div id="pages-panel" class="tab-panel hidden"><div class="table-wrap"><table><thead><tr><th>Status</th><th>Exact page URL</th><th>Title</th><th>Depth</th><th>Error</th></tr></thead><tbody id="page-rows"></tbody></table></div></div>
+            <div id="issues-panel" class="tab-panel hidden"><div id="issue-list" class="issue-list"></div></div>
+          </div>
+        </section>
+      </section>
+
+      <section id="testing-view" class="app-view hidden">
+        <header class="topbar"><div><p class="eyebrow">MULTI-USER ACCESS TESTING</p><h1>Run the same checks as different users.</h1><p class="header-copy">Build reusable cases, select accounts, then compare BOLA and ACL behavior in one report.</p></div><div id="test-export-menu" class="export-group hidden"><a id="test-export-json" class="export-button" href="#">JSON</a><a id="test-export-csv" class="export-button" href="#">Excel-ready CSV</a><a id="test-export-xlsx" class="export-button accent" href="#">Styled Excel</a></div></header>
+        <div class="lab-grid">
+          <section class="lab-card">
+            <div class="card-heading"><div><span class="step-number">1</span><div><h2>Test accounts</h2><p>Select one or more saved user sessions.</p></div></div><button class="text-button" data-go="accounts" type="button">Manage accounts</button></div>
+            <label class="search-box wide"><span>⌕</span><input id="test-account-search" type="search" placeholder="Search account names"></label>
+            <div id="test-account-list" class="select-list empty-list">No accounts saved yet.</div>
+          </section>
+          <section class="lab-card">
+            <div class="card-heading"><div><span class="step-number">2</span><div><h2>Test cases</h2><p>Choose exact calls for this run.</p></div></div><button id="add-case-button" class="small-button" type="button">+ New case</button></div>
+            <div class="inline-filters"><label class="search-box wide"><span>⌕</span><input id="case-search" type="search" placeholder="Search cases or endpoint URLs"></label><select id="case-method-filter"><option value="">All methods</option><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option></select></div>
+            <div id="test-case-list" class="select-list empty-list">No test cases saved yet.</div>
+          </section>
+        </div>
+
+        <section class="lab-card run-card">
+          <div class="card-heading"><div><span class="step-number">3</span><div><h2>Run settings</h2><p>Tests run account-by-account, in the chosen case order.</p></div></div></div>
+          <div class="run-settings-grid">
+            <label class="field"><span>Run name</span><input id="run-name" type="text" placeholder="BOLA regression"></label>
+            <label class="switch-row"><input id="include-crawl" type="checkbox"><span><strong>Full authenticated site crawl</strong><small>Also map every API found for each selected user.</small></span></label>
+            <label id="crawl-target-field" class="field hidden"><span>Crawl target <em>blank uses each account URL</em></span><input id="crawl-target" type="url" placeholder="https://uat.example.com"></label>
+            <div id="crawl-options" class="crawl-options-block hidden"><div class="mini-grid"><label class="field compact"><span>Pages</span><input id="run-max-pages" type="number" value="50" min="1" max="500"></label><label class="field compact"><span>Depth</span><input id="run-max-depth" type="number" value="5" min="0" max="20"></label><label class="field compact"><span>Delay, ms</span><input id="run-delay" type="number" value="150" min="0" max="10000"></label><label class="field compact"><span>Timeout, ms</span><input id="run-timeout" type="number" value="20000" min="2000" max="120000"></label></div><div class="mini-grid"><label class="field compact"><span>Variants / route</span><input id="run-max-route-variants" type="number" value="1" min="1" max="25"></label><label class="field compact"><span>Custom ID regexes</span><input id="run-custom-id-patterns" type="text" placeholder="^DAM\d+$"></label></div><div class="checks crawl-checks"><label><input id="run-openapi" type="checkbox" checked><span>OpenAPI discovery</span></label><label><input id="run-safe-probing" type="checkbox"><span>Safe GET, HEAD, OPTIONS checks</span></label><label><input id="run-subdomains" type="checkbox"><span>Include subdomains</span></label><label><input id="run-ignore-tls" type="checkbox"><span>Ignore TLS errors</span></label></div></div>
+          </div>
+          <div id="run-mutation-warning" class="mutation-banner hidden"><strong>Mutating test selected.</strong><span>POST, PUT, PATCH, or DELETE can change data. Type <code>I AM AUTHORIZED</code> to run.</span><input id="run-authorization" type="text" spellcheck="false" placeholder="I AM AUTHORIZED"></div>
+          <div class="run-actions"><div id="run-selection-summary">Select at least one account and one case, or enable crawl.</div><button id="start-test-run" class="primary-button compact-button" type="button">Run selected checks</button><button id="cancel-test-run" class="secondary-button compact-button hidden" type="button">Cancel</button></div>
+        </section>
+
+        <section id="test-run-progress" class="progress-card hidden"><div class="progress-heading"><div><p class="eyebrow">TESTING</p><h2 id="test-phase">Preparing test run</h2></div><span id="test-progress-number">0%</span></div><div class="progress-track"><span id="test-progress-bar"></span></div><div class="progress-stats"><div><strong id="test-steps">0</strong><span>steps completed</span></div><div><strong id="test-live-results">0</strong><span>results recorded</span></div><div><strong id="test-elapsed">00:00</strong><span>elapsed</span></div></div></section>
+
+        <section id="test-results" class="hidden">
+          <div class="summary-grid"><article><span>Total tests</span><strong id="run-total">0</strong><small>all selected users</small></article><article><span>Passed</span><strong id="run-passed">0</strong><small>expected behavior</small></article><article><span>Failed</span><strong id="run-failed">0</strong><small>needs review</small></article><article><span>Errors</span><strong id="run-errors">0</strong><small>request or setup issue</small></article></div>
+          <div class="result-card"><div class="toolbar"><label class="search-box"><span>⌕</span><input id="test-result-search" type="search" placeholder="Search users, tests, exact URLs, status"></label><select id="test-result-filter"><option value="">All results</option><option>PASS</option><option>FAIL</option><option>ERROR</option><option>OBSERVED</option></select><span id="test-result-count" class="result-count"></span></div><div class="table-wrap"><table><thead><tr><th>Result</th><th>Account</th><th>Test / source</th><th>HTTP</th><th>Exact URL</th><th>Expected</th><th>Actual</th><th>Time</th><th></th></tr></thead><tbody id="test-result-rows"></tbody></table></div></div>
+        </section>
+      </section>
+
+      <section id="accounts-view" class="app-view hidden">
+        <header class="topbar"><div><p class="eyebrow">AUTHENTICATED PROFILES</p><h1>Save each test user once.</h1><p class="header-copy">Interactive login works with SSO and MFA. Sessions stay encrypted on this computer.</p></div><button id="add-account-button" class="primary-button header-button" type="button">+ Add account</button></header>
+        <div class="notice-card"><div class="notice-icon">i</div><div><strong>Why this finds more endpoints</strong><p>Many apps need cookies, local storage, tenant headers, CSRF state, or an SSO session. A raw bearer token may only cover the API, not the signed-in frontend.</p></div></div>
+        <div class="toolbar standalone"><label class="search-box"><span>⌕</span><input id="account-search" type="search" placeholder="Search saved accounts"></label><span id="account-count" class="result-count"></span></div>
+        <div id="account-grid" class="account-grid"><div class="empty-collection"><h2>No accounts yet</h2><p>Add a real test user, then capture its signed-in browser session.</p></div></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="drawer-backdrop" class="drawer-backdrop hidden"></div>
+  <aside id="detail-drawer" class="detail-drawer" aria-hidden="true"><div class="drawer-header"><div><span id="drawer-method" class="method-pill">GET</span><h2 id="drawer-path">/api/example</h2></div><button id="drawer-close" class="close-button" type="button">×</button></div><div id="drawer-body" class="drawer-body"></div></aside>
+
+  <div id="modal-backdrop" class="modal-backdrop hidden"></div>
+  <section id="account-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-header"><div><p class="eyebrow">ACCOUNT PROFILE</p><h2 id="account-modal-title">Add test account</h2></div><button class="close-button modal-close" type="button">×</button></div>
+    <form id="account-form" class="modal-body" autocomplete="off">
+      <input id="account-id" type="hidden">
+      <div class="form-grid"><label class="field"><span>Account display name</span><input id="account-name" type="text" placeholder="Internal user A" required></label><label class="field"><span>Authentication</span><select id="account-auth-mode"><option value="interactive">Interactive browser login</option><option value="bearer">Bearer token</option><option value="form">Username and password form</option></select></label></div>
+      <div class="form-grid"><label class="field"><span>Base website URL</span><input id="account-base-url" type="url" placeholder="https://uat.example.com" required></label><label class="field"><span>Login URL</span><input id="account-login-url" type="url" placeholder="https://uat.example.com/login"></label></div>
+      <div id="account-bearer-fields" class="hidden"><label class="field"><span>Bearer token</span><div class="secret-wrap"><input id="account-bearer" type="password" placeholder="Paste without Bearer" autocomplete="new-password"><button class="icon-button toggle-secret" type="button">Show</button></div></label></div>
+      <div id="account-form-fields" class="hidden"><div class="form-grid"><label class="field"><span>Username</span><input id="account-username" type="text" autocomplete="username"></label><label class="field"><span>Password <em>encrypted</em></span><div class="secret-wrap"><input id="account-password" type="password" autocomplete="new-password"><button class="icon-button toggle-secret" type="button">Show</button></div></label></div><details class="advanced"><summary>Login selectors <span>+</span></summary><label class="field"><span>Username selector</span><input id="username-selector" type="text" value='input[type="email"], input[name="username"]'></label><label class="field"><span>Password selector</span><input id="password-selector" type="text" value='input[type="password"]'></label><label class="field"><span>Submit selector</span><input id="submit-selector" type="text" value='button[type="submit"]'></label></details></div>
+      <details class="advanced modal-advanced" open><summary>API and user settings <span>+</span></summary><label class="field"><span>Token storage key <em>optional</em></span><input id="token-storage-key" type="text" placeholder="accessToken"><small>Used when login stores the API token inside browser storage.</small></label><label class="field"><span>Allowed API origins <em>one per line</em></span><textarea id="allowed-origins" rows="3" placeholder="https://api.uat.example.com"></textarea></label><div class="form-grid"><label class="field"><span>Extra headers <em>JSON</em></span><textarea id="account-extra-headers" rows="4" placeholder='{"X-Tenant-ID":"value"}'></textarea></label><label class="field"><span>Per-user variables <em>JSON</em></span><textarea id="account-variables" rows="4" placeholder='{"userId":"...","ticketId":"..."}'></textarea></label></div></details>
+      <div class="modal-actions"><button class="secondary-button modal-cancel" type="button">Cancel</button><button class="primary-button compact-button" type="submit">Save account</button></div>
+    </form>
+  </section>
+
+  <section id="case-modal" class="modal wide-modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-header"><div><p class="eyebrow">REUSABLE CHECK</p><h2 id="case-modal-title">New test case</h2></div><button class="close-button modal-close" type="button">×</button></div>
+    <form id="case-form" class="modal-body" autocomplete="off">
+      <input id="case-id" type="hidden">
+      <div class="form-grid case-top-grid"><label class="field"><span>Test case name</span><input id="case-name" type="text" placeholder="Foreign ticket is blocked" required></label><label class="field"><span>HTTP method</span><select id="case-method"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option></select></label></div>
+      <label class="field"><span>Exact URL or relative endpoint</span><input id="case-url" type="text" placeholder="/api/Tickets/${ticketId}" required spellcheck="false"><small>Paths remain exactly as entered. Tracefold never converts usefulLinks into useful-links. Use <code>${variableName}</code> for per-user values.</small></label>
+      <div class="form-grid"><label class="field"><span>Default expected statuses</span><input id="case-statuses" type="text" value="200" placeholder="200, 403"></label><label class="field"><span>Notes</span><input id="case-notes" type="text" placeholder="Reason or test setup"></label></div>
+      <div id="account-expectations" class="expectations"><div class="section-title">Per-account status overrides</div><p>Add accounts first. Blank values use the default status list.</p></div>
+      <div class="json-grid"><label class="field"><span>Query parameters <em>JSON</em></span><textarea id="case-query" rows="5" placeholder='{"filter":{"where":{"sourceId":"${ticketId}"}}}'></textarea></label><label class="field"><span>JSON payload <em>blank means none</em></span><textarea id="case-payload" rows="5" placeholder='{"title":"Test"}'></textarea></label><label class="field"><span>Extra headers <em>JSON</em></span><textarea id="case-headers" rows="5" placeholder='{"X-Test-Run":"bola"}'></textarea></label><label class="field"><span>Assertions <em>JSON array</em></span><textarea id="case-assertions" rows="5" placeholder='[{"type":"empty_array","path":"$"}]'></textarea></label></div>
+      <div class="assertion-help"><strong>Assertion types:</strong> <code>contains</code>, <code>not_contains</code>, <code>empty_array</code>, <code>jsonpath_equals</code>, <code>jsonpath_not_equals</code>, <code>jsonpath_count</code>.</div>
+      <div class="modal-actions"><button class="secondary-button modal-cancel" type="button">Cancel</button><button class="primary-button compact-button" type="submit">Save test case</button></div>
+    </form>
+  </section>
+
+  <div id="login-banner" class="login-banner hidden"><div><span class="spinner"></span><p><strong id="login-banner-name">Login window open</strong><small>Finish signing in, then save the captured session.</small></p></div><div><button id="cancel-login" class="text-button" type="button">Cancel</button><button id="finish-login" class="primary-button compact-button" type="button">Save session</button></div></div>
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

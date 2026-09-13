@@ -76,6 +76,57 @@ The exact URLs still remain visible when observed. This avoids the common failur
 
 ---
 
+# v0.2.1 Beta: Plugin Browser and Background Updates
+
+Shipped. A point release on the 0.2 plugin foundation, adding distribution and in-app
+hosting without expanding the core's scope.
+
+### Plugin distribution
+
+- Public plugin catalog served as static HTTPS JSON, with no account or server.
+- Plugin browser with search, categories and publisher details.
+- Capabilities shown before install.
+- SHA-256 verification of every downloaded package.
+- Package manifest must match the catalog entry that advertised it.
+- Update badges for installed plugins.
+- Configurable catalog source.
+- Local file install retained.
+- Deterministic package builder and catalog generator.
+- Reproducibility and catalog-drift checks in CI.
+
+### Plugin hosting
+
+- Plugins displayed inside the Tracefold window.
+- Running plugins reachable from the sidebar.
+- Host passes theme and language to the plugin.
+- Separate plugin window retained as an option.
+- Manifest fallback runtime commands.
+- Native package extraction through the existing staged installer.
+
+### Discovery as a plugin
+
+- Runs inside Tracefold; no external browser tab for its interface.
+- Chromium only for interactive login and background Playwright work.
+- Follows the Tracefold theme in light and dark.
+- Data, runtime and Chromium in the persistent plugin directory.
+- Reports written to disk and revealable, since a hosted frame cannot download.
+- First-launch environment preparation with progress shown in the app.
+
+### Updates
+
+- Automatic checks after launch, hourly, and on window focus, with backoff.
+- Background download that interrupts nothing.
+- Restart-to-update applies a staged release immediately.
+- Silent Windows installation with no installer window and no elevation.
+- Save and backup immediately before installation.
+
+### Fixed
+
+- Installing a plugin from a file was unreachable in packaged 0.2.0 builds because the
+  capability allowlist named a command that had been replaced.
+
+---
+
 # v0.3.0 Beta: API Workbench
 
 Goal: make Tracefold useful for manual API investigation without leaving the app.
@@ -230,19 +281,16 @@ Destructive or high-volume tests stay disabled by default. Every active test sho
 
 Goal: make plugin distribution safe and easy.
 
-### Features
+Delivered in v0.2.1: public plugin catalog, categories, search and filters, permissions
+shown before install, SHA-256 artifact verification, minimum Tracefold version checks and
+plugin API compatibility checks.
 
-- Public plugin catalog.
-- Plugin categories.
-- Search and filters.
+### Remaining features
+
 - Publisher pages.
-- Version history.
-- Permissions shown before install.
+- Version history in the browser.
 - Plugin ratings and issue links.
 - Signed plugin packages.
-- SHA-256 artifact verification.
-- Minimum Tracefold version checks.
-- Plugin API compatibility checks.
 - Automatic plugin update checks.
 - Rollback to previous plugin version.
 - Failed-update recovery.

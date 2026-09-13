@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import Icon from '../../lib/ui/Icon.svelte';
   import { t } from '../../lib/i18n/i18n.svelte';
   import type { PluginManager } from '../../lib/services/plugins.svelte';
@@ -6,18 +7,35 @@
   let { manager, theme, language }: { manager: PluginManager; theme: string; language: string } =
     $props();
 
+  let frame = $state<HTMLIFrameElement | null>(null);
+  let source = $state('');
   let reloadKey = $state(0);
 
   const active = $derived(manager.active);
 
   /**
    * Plugins are served from their own loopback origin, so the host cannot reach into them
-   * to restyle anything. Instead the current appearance is handed over in the URL, and a
-   * plugin that understands it renders in the same theme as the rest of Tracefold.
+   * to restyle anything. The appearance is handed over in the URL instead, and a plugin
+   * that understands it renders in the same theme as the rest of Tracefold.
+   *
+   * The theme is read untracked on purpose: it seeds the first paint, and changing it
+   * later must not rewrite `src`, which would reload the plugin and discard whatever the
+   * user had open in it.
    */
-  const source = $derived(
-    active ? `${active.url}/?tracefoldTheme=${theme}&tracefoldLang=${language}&host=tracefold` : '',
-  );
+  $effect(() => {
+    const current = manager.active;
+    source = current
+      ? `${current.url}/?tracefoldTheme=${untrack(() => theme)}&tracefoldLang=${untrack(() => language)}&host=tracefold`
+      : '';
+  });
+
+  /** Later appearance changes are announced instead, so the plugin restyles in place. */
+  $effect(() => {
+    const message = { type: 'tracefold:appearance', theme, language };
+    if (!manager.active || !frame?.contentWindow) return;
+    // The plugin's origin is host-owned runtime state, never anything it told us.
+    frame.contentWindow.postMessage(message, new URL(manager.active.url).origin);
+  });
 
   function reload() {
     reloadKey += 1;
@@ -61,6 +79,7 @@
     </header>
     {#key reloadKey}
       <iframe
+        bind:this={frame}
         class="plugin-frame"
         src={source}
         title={active.plugin.name}

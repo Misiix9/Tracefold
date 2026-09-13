@@ -1,6 +1,6 @@
 {
   "schema": "tracefold.catalog.v1",
-  "updated": "2026-09-13T12:09:38.913Z",
+  "updated": "2026-09-13T12:13:29.521Z",
   "plugins": [
     {
       "id": "tracefold.discovery",
@@ -15,15 +15,15 @@
           "apiVersion": 1,
           "minTracefoldVersion": "0.2.1",
           "url": "https://github.com/Misiix9/Tracefold/releases/download/plugin-tracefold.discovery-v2.1.0/tracefold-discovery-v2.1.0.tracefold-plugin",
-          "sha256": "cdb81fb3e37b10f6311f0a820adcf26eb1ff4f747a7df68d822b881e104fcf9e",
-          "size": 71528,
+          "sha256": "42b1ed7c6e564d7605933c00c818d5e845796caea6d548745e39d6676957f414",
+          "size": 71770,
           "capabilities": [
             "network.targeted-http",
             "browser.playwright",
             "local.encrypted-secrets",
             "local.files.app-data"
           ],
-          "published": "2026-09-13T12:09:38.907Z",
+          "published": "2026-09-13T12:13:29.514Z",
           "notes": "Runs inside the Tracefold window, follows the Tracefold theme, and stores accounts, sessions, scans and reports in its own persistent plugin directory. The first launch prepares a private Python environment and Chromium build."
         }
       ]

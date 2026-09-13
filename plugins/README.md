@@ -41,6 +41,9 @@ Content-Security-Policy: ... frame-ancestors 'self' tauri://localhost http://tau
 
 and must **not** send `X-Frame-Options`, which cannot express an allowed embedder.
 
+A later theme or language change is delivered as a `tracefold:appearance` message rather
+than a reload, so a plugin can restyle in place without losing the user's work.
+
 ## Available plugins
 
 - `tracefold.discovery` — authenticated website/API discovery and multi-user authorization

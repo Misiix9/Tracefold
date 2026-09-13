@@ -27,6 +27,20 @@ Content-Security-Policy: ... frame-ancestors 'self' tauri://localhost http://tau
 It must **not** send `X-Frame-Options`: the header cannot name an allowed embedder, so any
 value blocks the host.
 
+When the user changes theme or language while the plugin is open, the host **posts a
+message** rather than reloading the frame, so nothing in progress is lost:
+
+```js
+window.addEventListener('message', (event) => {
+  if (event.source !== window.parent) return;
+  if (event.data?.type !== 'tracefold:appearance') return;
+  // event.data.theme is 'light' or 'dark'; event.data.language is 'hu' or 'en'
+});
+```
+
+Check `event.source` before acting: only the window that embedded the page may change its
+appearance.
+
 Browser-style downloads do not work in a hosted frame. A plugin that produces files should
 write them into its own data directory and report the path, rather than relying on
 `Content-Disposition`.

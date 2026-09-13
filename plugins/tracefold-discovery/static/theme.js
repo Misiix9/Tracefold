@@ -27,13 +27,30 @@
 
   if (params.get('host') === 'tracefold') root.dataset.host = 'tracefold';
 
+  var pinned = Boolean(requested);
+
   // Follow the system only while the host has not pinned a theme.
-  if (!requested && window.matchMedia) {
+  if (!pinned && window.matchMedia) {
     var media = window.matchMedia('(prefers-color-scheme: dark)');
     var onChange = function () {
-      root.dataset.theme = fromSystem();
+      if (!pinned) root.dataset.theme = fromSystem();
     };
     if (media.addEventListener) media.addEventListener('change', onChange);
     else if (media.addListener) media.addListener(onChange);
   }
+
+  // The host announces a later theme or language change rather than reloading the page,
+  // so switching appearance in Tracefold does not discard work in progress here.
+  window.addEventListener('message', function (event) {
+    // Only the window that embedded this page may change its appearance.
+    if (event.source !== window.parent || window.parent === window) return;
+    var data = event.data;
+    if (!data || data.type !== 'tracefold:appearance') return;
+    var theme = normalise(data.theme);
+    if (theme) {
+      pinned = true;
+      root.dataset.theme = theme;
+    }
+    if (data.language === 'hu' || data.language === 'en') root.lang = data.language;
+  });
 })();

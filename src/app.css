@@ -455,6 +455,19 @@ kbd {
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
+.nav-running {
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4c9a6a;
+  flex: none;
+}
+.plugin-nav .nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .nav-section {
   margin: 15px 12px 7px;
   padding-top: 16px;
@@ -533,6 +546,12 @@ kbd {
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+/* A hosted plugin owns the whole work area; the frame scrolls, not the page around it. */
+.workspace-content.hosting {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .page {
   padding: 32px 36px;
@@ -1147,6 +1166,7 @@ kbd {
   .sidebar .project-switch,
   .nav-label,
   .nav-count,
+  .nav-running,
   .nav-section,
   .local-indicator {
     display: none;

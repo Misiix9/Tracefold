@@ -35,6 +35,13 @@ const messages: Record<string, string> = {
   PLUGIN_RUNTIME: 'The plugin runtime could not start or stop safely.',
   PLUGIN_DISABLED: 'The plugin is disabled. Enable it before opening it.',
   PLUGIN_WINDOW: 'Tracefold could not open the plugin window.',
+  CATALOG_NETWORK: 'The plugin catalog could not be reached. Check your connection and try again.',
+  CATALOG_INVALID: 'The plugin catalog is invalid or uses an unsupported format.',
+  CATALOG_NOT_FOUND: 'That plugin is no longer in the catalog. Refresh the catalog and try again.',
+  CATALOG_UNAVAILABLE: 'The plugin catalog is unavailable. Refresh it and try again.',
+  CATALOG_INCOMPATIBLE: 'This plugin needs a different Tracefold version.',
+  CATALOG_CHECKSUM:
+    'The downloaded plugin package failed its checksum check and was not installed.',
 };
 /** Technical diagnostics are retained when an exact translation is unavailable. */
 export function errorText(error: unknown): string {

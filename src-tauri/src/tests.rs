@@ -456,3 +456,49 @@ fn imported_backup_rejects_unexpected_schema_even_with_matching_checksum() {
     );
     assert_eq!(workspace.list_projects().unwrap().len(), 1);
 }
+
+/// The capability allowlist and the invoke handler drift silently: a command that is
+/// registered but not allowed fails only at runtime, in a packaged build. v0.2.0 shipped
+/// with the streaming plugin installer unreachable for exactly that reason.
+#[test]
+fn every_registered_command_is_permitted() {
+    const LIB: &str = include_str!("lib.rs");
+    const PERMISSIONS: &str = include_str!("../permissions/workspace.toml");
+
+    let handler = LIB
+        .split_once("tauri::generate_handler![")
+        .expect("lib.rs must register an invoke handler")
+        .1
+        .split_once(']')
+        .expect("the invoke handler list must be closed")
+        .0;
+    let registered: Vec<&str> = handler
+        .split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .collect();
+
+    let allowed_line = PERMISSIONS
+        .lines()
+        .find(|line| line.starts_with("commands.allow"))
+        .expect("the workspace permission must declare commands.allow");
+    let allowed: Vec<&str> = allowed_line
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .collect();
+
+    assert!(!registered.is_empty(), "no commands were parsed from lib.rs");
+    for command in &registered {
+        assert!(
+            allowed.contains(command),
+            "command `{command}` is registered but missing from permissions/workspace.toml"
+        );
+    }
+    for command in &allowed {
+        assert!(
+            registered.contains(command),
+            "permissions/workspace.toml allows `{command}`, which is not a registered command"
+        );
+    }
+}

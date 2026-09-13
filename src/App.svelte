@@ -25,6 +25,7 @@
   import ReportsView from './features/reports/ReportsView.svelte';
   import TemplatesView from './features/templates/TemplatesView.svelte';
   import PluginsView from './features/plugins/PluginsView.svelte';
+  import PluginHost from './features/plugins/PluginHost.svelte';
   import type { AnyEntity } from './lib/domain/types';
   import { plainText } from './lib/domain/defaults';
   import { captureEvidence, importEvidence } from './features/evidence/evidence';
@@ -42,11 +43,9 @@
   });
   onMount(() => {
     if (!isTauri()) return;
-    const initial = setTimeout(() => void updater.check(), 10000);
-    const interval = setInterval(() => void updater.check(), 4 * 60 * 60 * 1000);
+    const stop = updater.startAutomaticChecks();
     return () => {
-      clearTimeout(initial);
-      clearInterval(interval);
+      stop();
       void updater.dispose();
     };
   });
@@ -77,14 +76,16 @@
       searchResults.search(workspace.projectId, search, searchKind || undefined);
     else searchResults.clear();
   });
+  const resolvedTheme = $derived(
+    workspace.settings.theme === 'system'
+      ? systemDark
+        ? 'dark'
+        : 'light'
+      : workspace.settings.theme,
+  );
   $effect(() => {
     document.documentElement.lang = workspace.settings.language;
-    document.documentElement.dataset.theme =
-      workspace.settings.theme === 'system'
-        ? systemDark
-          ? 'dark'
-          : 'light'
-        : workspace.settings.theme;
+    document.documentElement.dataset.theme = resolvedTheme;
     document.documentElement.dataset.density = workspace.settings.density;
     document.documentElement.style.setProperty(
       '--editor-size',
@@ -259,6 +260,18 @@
               class="nav-count"
               >{workspace.visible.filter((r) => item.kinds.includes(r.kind)).length}</span
             >{/if}</button
+        >{/each}{#each plugins.plugins.filter((p) => p.running) as plugin (plugin.id)}<button
+          class="nav-item plugin-nav"
+          class:selected={workspace.view === 'plugins' && plugins.active?.plugin.id === plugin.id}
+          title={plugin.name}
+          onclick={() => {
+            workspace.navigate('plugins');
+            void plugins.open(plugin);
+          }}
+          ><Icon name="code" size={19} /><span class="nav-label">{plugin.name}</span><span
+            class="nav-running"
+            aria-label={t('Running')}
+          ></span></button
         >{/each}
     </nav>
     <div class="sidebar-footer">
@@ -313,7 +326,12 @@
           onclick={() => (workspace.error = '')}><Icon name="close" size={16} /></button
         >
       </div>{/if}
-    <main class="workspace-content" id="main-content" tabindex="-1">
+    <main
+      class="workspace-content"
+      class:hosting={workspace.view === 'plugins' && plugins.active}
+      id="main-content"
+      tabindex="-1"
+    >
       {#key workspace.projectId}
         {#if workspace.loading}<EmptyState
             title={t('Opening your workspace')}
@@ -328,7 +346,11 @@
         {:else if workspace.view === 'evidence'}<EvidenceView {workspace} />
         {:else if workspace.view === 'templates'}<TemplatesView {workspace} />
         {:else if workspace.view === 'reports'}<ReportsView {workspace} />
-        {:else if workspace.view === 'plugins'}<PluginsView manager={plugins} />
+        {:else if workspace.view === 'plugins'}{#if plugins.active}<PluginHost
+              manager={plugins}
+              theme={resolvedTheme}
+              language={workspace.settings.language}
+            />{:else}<PluginsView manager={plugins} />{/if}
         {:else}<SettingsView {workspace} {updater} />{/if}
       {/key}
     </main>

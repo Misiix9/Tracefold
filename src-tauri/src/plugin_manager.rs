@@ -16,12 +16,12 @@ use uuid::Uuid;
 use std::os::unix::process::CommandExt;
 
 pub const MAX_PACKAGE_BYTES: u64 = 256 * 1024 * 1024;
-const MAX_FILE_BYTES: usize = 64 * 1024 * 1024;
+pub const MAX_FILE_BYTES: usize = 64 * 1024 * 1024;
 const MAX_TOTAL_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 const MAX_FILES: usize = 512;
 const START_TIMEOUT: Duration = Duration::from_secs(120);
 const HEALTH_TIMEOUT: Duration = Duration::from_millis(200);
-const CURRENT_PLUGIN_API_VERSION: u32 = 1;
+pub const CURRENT_PLUGIN_API_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,6 +51,9 @@ pub struct RuntimeManifest {
     pub args: Vec<String>,
     pub health: String,
     pub bind: String,
+    /// Alternative executable names tried in order when `command` is not on PATH.
+    #[serde(default)]
+    pub command_candidates: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -186,20 +189,39 @@ impl PluginRuntime {
         Ok(())
     }
 
-    pub fn finalize_install(&self, install_id: &str) -> Result<PluginInfo> {
+    /// `expected` is the catalog entry that advertised this package. Installing it only
+    /// when the packaged manifest agrees stops a catalog entry from quietly shipping a
+    /// different plugin, or a different version, than the one the user chose.
+    pub fn finalize_install_expecting(
+        &self,
+        install_id: &str,
+        expected: Option<(&str, &str)>,
+    ) -> Result<PluginInfo> {
         validate_install_id(install_id)?;
         let session = self.installs.lock().map_err(|_| plugin_error("PLUGIN_STORAGE", "Plugin installation state is unavailable."))?.remove(install_id)
             .ok_or_else(|| plugin_error("PLUGIN_INPUT", "The plugin installation session is no longer available."))?;
-        let result = self.finalize_install_inner(&session);
+        let result = self.finalize_install_inner(&session, expected);
         if result.is_err() {
             let _ = fs::remove_dir_all(&session.root);
         }
         result
     }
 
-    fn finalize_install_inner(&self, session: &InstallSession) -> Result<PluginInfo> {
+    fn finalize_install_inner(
+        &self,
+        session: &InstallSession,
+        expected: Option<(&str, &str)>,
+    ) -> Result<PluginInfo> {
         let manifest = read_manifest(&session.root)?;
         validate_manifest(&manifest)?;
+        if let Some((id, version)) = expected {
+            if manifest.id != id || manifest.version != version {
+                return Err(plugin_error(
+                    "PLUGIN_INVALID",
+                    "The downloaded package does not match the catalog entry it came from. It was not installed.",
+                ));
+            }
+        }
         if session.file_count == 0 {
             return Err(plugin_error("PLUGIN_INVALID", "The plugin package is empty."));
         }
@@ -285,7 +307,7 @@ impl PluginRuntime {
         let data_dir = self.root.join("plugin-data").join(id);
         fs::create_dir_all(&data_dir).map_err(|e| plugin_error("PLUGIN_STORAGE", format!("Could not create plugin data directory: {e}")))?;
         let port = free_loopback_port()?;
-        let command_path = resolve_command(&manifest.runtime.command, &plugin_dir)?;
+        let command_path = resolve_runtime_command(&manifest.runtime, &plugin_dir)?;
         let mut args = if manifest.runtime.args.is_empty() { vec![manifest.runtime.entry.clone()] } else { manifest.runtime.args.clone() };
         for arg in &mut args {
             *arg = arg.replace("{port}", &port.to_string())
@@ -469,6 +491,10 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<()> {
     if manifest.runtime.entry.trim().is_empty() { return Err(plugin_error("PLUGIN_INVALID", "Plugin runtime entrypoint is required.")); }
     if manifest.runtime.command.trim().is_empty() || manifest.runtime.command.len() > 100 { return Err(plugin_error("PLUGIN_INVALID", "Plugin runtime command is invalid.")); }
     if manifest.runtime.args.len() > 64 { return Err(plugin_error("PLUGIN_INVALID", "Plugin runtime has too many arguments.")); }
+    if manifest.runtime.command_candidates.len() > 8 { return Err(plugin_error("PLUGIN_INVALID", "Plugin runtime declares too many fallback commands.")); }
+    if manifest.runtime.command_candidates.iter().any(|value| value.trim().is_empty() || value.len() > 100) {
+        return Err(plugin_error("PLUGIN_INVALID", "A plugin runtime fallback command is invalid."));
+    }
     if manifest.runtime.health.is_empty() || manifest.runtime.health.len() > 200 || !manifest.runtime.health.starts_with('/') || manifest.runtime.health.contains("..") || manifest.runtime.health.contains('\\') || manifest.runtime.health.chars().any(|c| c.is_control() || c.is_whitespace()) {
         return Err(plugin_error("PLUGIN_INVALID", "Plugin health path must be a local HTTP path."));
     }
@@ -517,6 +543,44 @@ fn package_path_key(path: &Path) -> String {
 
 fn is_version(value: &str) -> bool { parse_version(value).is_ok() }
 
+/// Shared with the catalog so both validate plugin identity the same way.
+pub fn validate_plugin_id(id: &str) -> Result<()> { validate_id(id) }
+
+pub fn validate_version_string(value: &str) -> Result<()> { parse_version(value).map(|_| ()) }
+
+/// Orders two `major.minor.patch` strings. Unparseable input sorts below everything, so a
+/// malformed version can never be mistaken for a newer release.
+pub fn compare_versions(left: &str, right: &str) -> std::cmp::Ordering {
+    match (parse_version(left), parse_version(right)) {
+        (Ok(a), Ok(b)) => a.cmp(&b),
+        (Ok(_), Err(_)) => std::cmp::Ordering::Greater,
+        (Err(_), Ok(_)) => std::cmp::Ordering::Less,
+        (Err(_), Err(_)) => std::cmp::Ordering::Equal,
+    }
+}
+
+/// Install a complete `.tracefold-plugin` archive already held in memory. Extraction runs
+/// through the same staging session as every other install, so path validation, package
+/// limits, manifest checks and the atomic swap are shared rather than reimplemented.
+pub fn install_package_bytes(
+    runtime: &PluginRuntime,
+    archive: &[u8],
+    expected: Option<(&str, &str)>,
+) -> Result<PluginInfo> {
+    if archive.len() as u64 > MAX_PACKAGE_BYTES {
+        return Err(plugin_error("LIMIT_EXCEEDED", "The plugin package exceeds the 256 MiB limit."));
+    }
+    if archive.is_empty() {
+        return Err(plugin_error("PLUGIN_INVALID", "The plugin package is empty."));
+    }
+    let install_id = crate::catalog::extract_package(runtime, archive)?;
+    let result = runtime.finalize_install_expecting(&install_id, expected);
+    if result.is_err() {
+        let _ = runtime.abort_install(&install_id);
+    }
+    result
+}
+
 fn parse_version(value: &str) -> Result<(u64, u64, u64)> {
     let mut parts = value.split('.');
     let a = parts.next().and_then(|v| v.parse::<u64>().ok());
@@ -531,6 +595,22 @@ fn free_loopback_port() -> Result<u16> {
         .and_then(|listener| listener.local_addr())
         .map(|address| address.port())
         .map_err(|e| plugin_error("PLUGIN_RUNTIME", format!("Could not allocate a loopback port: {e}")))
+}
+
+/// Interpreter names differ across platforms and installs: `python` on one machine is
+/// `python3` or `py` on another. A manifest may list fallbacks so a single package works
+/// everywhere instead of failing with "command not found" on half of them.
+fn resolve_runtime_command(runtime: &RuntimeManifest, plugin_dir: &Path) -> Result<PathBuf> {
+    let first = resolve_command(&runtime.command, plugin_dir);
+    if first.is_ok() {
+        return first;
+    }
+    for candidate in &runtime.command_candidates {
+        if let Ok(path) = resolve_command(candidate, plugin_dir) {
+            return Ok(path);
+        }
+    }
+    first
 }
 
 fn resolve_command(command: &str, plugin_dir: &Path) -> Result<PathBuf> {
@@ -665,6 +745,7 @@ mod tests {
                 args: vec!["run.py".into(), "--port".into(), "{port}".into()],
                 health: "/api/health".into(),
                 bind: "127.0.0.1".into(),
+                command_candidates: vec!["python3".into()],
             },
             capabilities: vec!["network.targeted-http".into()],
         }
@@ -721,6 +802,111 @@ mod tests {
         assert!(swap_staged_plugin(&destination, &staging, true).is_err());
         assert!(destination.join("manifest.json").is_file());
         assert!(staging.is_dir());
+    }
+
+    fn package(manifest: &PluginManifest, extra: &[(&str, &[u8])]) -> Vec<u8> {
+        use std::io::Write as _;
+        let mut buffer = Vec::new();
+        {
+            let mut writer = zip::ZipWriter::new(io::Cursor::new(&mut buffer));
+            let options: zip::write::FileOptions<'_, ()> =
+                zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            writer.start_file("manifest.json", options).unwrap();
+            writer.write_all(&serde_json::to_vec(manifest).unwrap()).unwrap();
+            writer.start_file(&manifest.runtime.entry, options).unwrap();
+            writer.write_all(b"# entrypoint\n").unwrap();
+            for (name, data) in extra {
+                writer.start_file(*name, options).unwrap();
+                writer.write_all(data).unwrap();
+            }
+            writer.finish().unwrap();
+        }
+        buffer
+    }
+
+    #[test]
+    fn installs_a_package_archive_end_to_end() {
+        let runtime = PluginRuntime::open(tempdir().unwrap().keep()).unwrap();
+        let value = manifest("example.plugin");
+        let info = install_package_bytes(&runtime, &package(&value, &[]), None).unwrap();
+        assert_eq!(info.id, "example.plugin");
+        assert_eq!(info.version, "1.0.0");
+        assert!(info.enabled && !info.running);
+        assert_eq!(runtime.list().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn rejects_a_package_that_disagrees_with_its_catalog_entry() {
+        let runtime = PluginRuntime::open(tempdir().unwrap().keep()).unwrap();
+        let archive = package(&manifest("example.plugin"), &[]);
+
+        assert!(install_package_bytes(&runtime, &archive, Some(("other.plugin", "1.0.0"))).is_err());
+        assert!(install_package_bytes(&runtime, &archive, Some(("example.plugin", "9.9.9"))).is_err());
+        assert!(runtime.list().unwrap().is_empty(), "a rejected package must not be installed");
+
+        assert!(install_package_bytes(&runtime, &archive, Some(("example.plugin", "1.0.0"))).is_ok());
+    }
+
+    #[test]
+    fn rejects_hostile_archive_paths_without_writing_outside_storage() {
+        let root = tempdir().unwrap().keep();
+        let runtime = PluginRuntime::open(root.clone()).unwrap();
+        let value = manifest("example.plugin");
+        for hostile in ["../escaped.txt", "nested/../../escaped.txt", "/absolute.txt"] {
+            let archive = package(&value, &[(hostile, b"payload")]);
+            assert!(
+                install_package_bytes(&runtime, &archive, None).is_err(),
+                "expected {hostile} to be rejected"
+            );
+        }
+        assert!(!root.parent().unwrap().join("escaped.txt").exists());
+        assert!(!root.join("escaped.txt").exists());
+        assert!(runtime.list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn rejects_archives_without_a_manifest_or_entrypoint() {
+        let runtime = PluginRuntime::open(tempdir().unwrap().keep()).unwrap();
+        assert!(install_package_bytes(&runtime, b"not a zip archive at all", None).is_err());
+        assert!(install_package_bytes(&runtime, &[], None).is_err());
+
+        let mut missing_entry = manifest("example.plugin");
+        missing_entry.runtime.entry = "run.py".into();
+        let mut buffer = Vec::new();
+        {
+            use std::io::Write as _;
+            let mut writer = zip::ZipWriter::new(io::Cursor::new(&mut buffer));
+            let options: zip::write::FileOptions<'_, ()> =
+                zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            writer.start_file("manifest.json", options).unwrap();
+            writer.write_all(&serde_json::to_vec(&missing_entry).unwrap()).unwrap();
+            writer.finish().unwrap();
+        }
+        assert!(install_package_bytes(&runtime, &buffer, None).is_err());
+    }
+
+    #[test]
+    fn orders_versions_and_tolerates_malformed_ones() {
+        use std::cmp::Ordering;
+        assert_eq!(compare_versions("1.2.3", "1.2.4"), Ordering::Less);
+        assert_eq!(compare_versions("1.10.0", "1.9.0"), Ordering::Greater);
+        assert_eq!(compare_versions("2.0.0", "2.0.0"), Ordering::Equal);
+        assert_eq!(compare_versions("1.0.0", "not-a-version"), Ordering::Greater);
+        assert_eq!(compare_versions("not-a-version", "1.0.0"), Ordering::Less);
+    }
+
+    #[test]
+    fn falls_back_to_an_alternative_runtime_command() {
+        let dir = tempdir().unwrap();
+        let mut runtime = manifest("example.plugin").runtime;
+        runtime.command = "tracefold-missing-interpreter".into();
+        runtime.command_candidates = vec!["tracefold-also-missing".into()];
+        assert!(resolve_runtime_command(&runtime, dir.path()).is_err());
+
+        // A real executable reached only through the fallback list still starts.
+        let real = std::env::current_exe().unwrap();
+        runtime.command_candidates = vec![real.to_string_lossy().into_owned()];
+        assert_eq!(resolve_runtime_command(&runtime, dir.path()).unwrap(), real);
     }
 
     #[test]

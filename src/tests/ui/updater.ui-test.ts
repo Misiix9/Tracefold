@@ -37,11 +37,11 @@ describe('update availability UI', () => {
   });
   it('shows the update action only for an available release and changes UI language', async () => {
     const update = { version: '0.2.0', download: vi.fn(), install: vi.fn(), close: vi.fn() };
-    const updater = new AppUpdater({
-      check: async () => update,
-      prepare: vi.fn(),
-      relaunch: vi.fn(),
-    });
+    // Background download off, so this asserts the found-but-not-yet-staged state.
+    const updater = new AppUpdater(
+      { check: async () => update, prepare: vi.fn(), relaunch: vi.fn() },
+      false,
+    );
     component = mount(UpdateButton, { target: document.body, props: { updater } });
     flushSync();
     expect(document.querySelector('button')).toBeNull();
@@ -66,5 +66,61 @@ describe('update availability UI', () => {
     expect(document.querySelector('progress')?.value).toBe(25);
     expect(document.querySelector('progress')?.max).toBe(100);
     expect(document.body.textContent).toContain('Projektjeid, bizonyítékaid és beállításaid');
+  });
+  it('re-checks when the window regains focus, throttled so alt-tabbing is free', async () => {
+    vi.useFakeTimers();
+    try {
+      const check = vi.fn().mockResolvedValue(null);
+      const updater = new AppUpdater({ check, prepare: vi.fn(), relaunch: vi.fn() });
+      const stop = updater.startAutomaticChecks();
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(check).toHaveBeenCalledTimes(1);
+
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(check).toHaveBeenCalledTimes(2);
+
+      // Returning to the window repeatedly must not produce a request each time.
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(check).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
+      const afterInterval = check.mock.calls.length;
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(check.mock.calls.length).toBe(afterInterval + 1);
+
+      stop();
+      const afterStop = check.mock.calls.length;
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+      expect(check.mock.calls.length).toBe(afterStop);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('offers a restart once the update is staged in the background', async () => {
+    const update = {
+      version: '0.2.1',
+      download: vi.fn().mockResolvedValue(undefined),
+      install: vi.fn(),
+      close: vi.fn(),
+    };
+    const updater = new AppUpdater({
+      check: async () => update,
+      prepare: vi.fn(),
+      relaunch: vi.fn(),
+    });
+    component = mount(UpdateButton, { target: document.body, props: { updater } });
+    flushSync();
+    await updater.check();
+    flushSync();
+    expect(updater.readyToRestart).toBe(true);
+    expect(document.querySelector('button')?.textContent).toContain('Újraindítás a frissítéshez');
+    expect(document.body.textContent).toContain('0.2.1');
+    flushSync(() => setLanguage('en'));
+    expect(document.querySelector('button')?.textContent).toContain('Restart to update');
   });
 });

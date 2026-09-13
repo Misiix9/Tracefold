@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from '../../lib/i18n/i18n.svelte';
+  import { t, date } from '../../lib/i18n/i18n.svelte';
   import { onMount } from 'svelte';
   import { getVersion } from '@tauri-apps/api/app';
   import type { AppUpdater } from '../../lib/services/updater.svelte';
@@ -35,19 +35,32 @@
       <strong>{installedVersion || t(versionFailed ? 'Unavailable' : 'Loading…')}</strong>
     </div>
     <p>{t('Download and install updates inside Tracefold.')}</p>
+    <p>
+      {t('Tracefold checks for updates on its own and downloads them quietly in the background.')}
+    </p>
   </div>
   <div>
     {#if updater.available}<p>
         {t('Available version: {version}', { version: updater.available.version })}
       </p>{/if}
+    {#if updater.prefetching}<p class="muted small" role="status">
+        {t('Downloading the update in the background…')}
+      </p>{:else if updater.readyToRestart}<p class="muted small" role="status">
+        {t('The update is downloaded and installs when you restart Tracefold.')}
+      </p>{/if}
     <button
       class="button"
-      disabled={updater.checking || updater.busy}
+      disabled={updater.checking || updater.busy || updater.prefetching}
       onclick={() => updater.check()}
     >
       {t(updater.checking ? 'Checking for updates…' : 'Check for updates')}
     </button>
     <p class="muted small" role="status">{t(messages[updater.checkStatus])}</p>
+    {#if updater.lastCheckedAt}<p class="muted small">
+        {t('Last checked {when}.', {
+          when: date(updater.lastCheckedAt, { dateStyle: 'medium', timeStyle: 'short' }),
+        })}
+      </p>{/if}
     {#if updater.checkError}<details>
         <summary>{t('Technical details')}</summary>
         <p class="details">{updater.checkError}</p>

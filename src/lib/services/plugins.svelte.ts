@@ -1,5 +1,4 @@
 import { invoke } from '@tauri-apps/api/core';
-import { AsyncUnzipInflate, Unzip } from 'fflate';
 import { errorText } from '../i18n/errors';
 import { t } from '../i18n/i18n.svelte';
 
@@ -17,120 +16,54 @@ export type PluginInfo = {
   url: string | null;
 };
 
-const MAX_ARCHIVE_BYTES = 256 * 1024 * 1024;
-const MAX_FILE_BYTES = 64 * 1024 * 1024;
-const MAX_TOTAL_UNPACKED_BYTES = 128 * 1024 * 1024;
-const MAX_FILES = 512;
+export type CatalogVersion = {
+  version: string;
+  apiVersion: number;
+  minTracefoldVersion: string;
+  url: string;
+  sha256: string;
+  size: number;
+  capabilities: string[];
+  published: string;
+  notes: string;
+};
 
-function concatChunks(chunks: Uint8Array[], size: number) {
-  const output = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return output;
-}
+export type CatalogEntry = {
+  id: string;
+  name: string;
+  publisher: string;
+  description: string;
+  category: string;
+  homepage: string;
+  latest: CatalogVersion | null;
+  installedVersion: string | null;
+  updateAvailable: boolean;
+  compatible: boolean;
+  incompatibleReason: string;
+};
 
-function isDirectoryEntry(path: string) {
-  return path.endsWith('/');
-}
+export type CatalogResult = { source: string; updated: string; entries: CatalogEntry[] };
 
-async function installArchive(archive: Uint8Array) {
-  if (archive.byteLength === 0) return null;
-  if (archive.byteLength > MAX_ARCHIVE_BYTES) throw new Error(t('The plugin package exceeds the 256 MiB limit.'));
-
-  const installId = await invoke<string>('begin_plugin_install');
-  let fileCount = 0;
-  let unpackedBytes = 0;
-  let aborted = false;
-  let uploadChain = Promise.resolve();
-  const filePromises: Promise<void>[] = [];
-
-  try {
-    const unzip = new Unzip((file) => {
-      if (isDirectoryEntry(file.name)) {
-        file.start();
-        return;
-      }
-
-      fileCount += 1;
-      if (fileCount > MAX_FILES) {
-        throw new Error(t('The plugin package contains too many files.'));
-      }
-
-      const chunks: Uint8Array[] = [];
-      let fileBytes = 0;
-      let fileError: Error | null = null;
-      let resolveFile!: () => void;
-      let rejectFile!: (reason?: unknown) => void;
-      const fileReady = new Promise<void>((resolve, reject) => {
-        resolveFile = resolve;
-        rejectFile = reject;
-      });
-      filePromises.push(fileReady);
-
-      file.ondata = (error, chunk, final) => {
-        if (aborted) return;
-        if (error) {
-          fileError = error;
-          aborted = true;
-          rejectFile(error);
-          return;
-        }
-        fileBytes += chunk.byteLength;
-        unpackedBytes += chunk.byteLength;
-        if (fileBytes > MAX_FILE_BYTES) {
-          const limitError = new Error(t('A plugin file exceeds the 64 MiB limit.'));
-          fileError = limitError;
-          aborted = true;
-          rejectFile(limitError);
-          return;
-        }
-        if (unpackedBytes > MAX_TOTAL_UNPACKED_BYTES) {
-          const limitError = new Error(t('The unpacked plugin package exceeds the 128 MiB limit.'));
-          fileError = limitError;
-          aborted = true;
-          rejectFile(limitError);
-          return;
-        }
-        chunks.push(chunk.slice());
-        if (final) {
-          const data = concatChunks(chunks, fileBytes);
-          uploadChain = uploadChain.then(() => {
-            if (aborted || fileError) return;
-            return invoke<void>('append_plugin_file', data, {
-              headers: {
-                'x-plugin-install-id': installId,
-                'x-plugin-path': encodeURIComponent(file.name),
-              },
-            });
-          });
-          uploadChain.then(resolveFile, rejectFile);
-        }
-      };
-      file.start();
-    });
-    unzip.register(AsyncUnzipInflate);
-    unzip.push(archive, true);
-    await Promise.all(filePromises);
-    await uploadChain;
-    if (aborted || fileCount === 0) {
-      throw new Error(fileCount === 0 ? t('The plugin package is empty.') : t('The plugin package exceeds the supported file or size limits.'));
-    }
-    return await invoke<PluginInfo>('finalize_plugin_install', { installId });
-  } catch (error) {
-    aborted = true;
-    await invoke<void>('abort_plugin_install', { installId }).catch(() => undefined);
-    throw error;
-  }
-}
-
+/**
+ * Extraction, checksum verification and installation all happen in Rust. This class only
+ * drives the UI state, so a browser preview can never reach a native-only command.
+ */
 export class PluginManager {
   plugins = $state<PluginInfo[]>([]);
   loading = $state(false);
   error = $state('');
   notification = $state('');
+
+  catalog = $state<CatalogEntry[]>([]);
+  catalogLoaded = $state(false);
+  catalogLoading = $state(false);
+  catalogError = $state('');
+  catalogUpdated = $state('');
+
+  /** The plugin currently hosted inline in the main window, and where to load it from. */
+  active = $state<{ plugin: PluginInfo; url: string } | null>(null);
+  opening = $state('');
+
   private busy = $state<Record<string, boolean>>({});
 
   isBusy(id: string) {
@@ -142,11 +75,29 @@ export class PluginManager {
     else delete this.busy[id];
   }
 
+  /** A notification is cosmetic: it must never be able to fail an install that succeeded. */
+  private notify(message: string) {
+    this.notification = message;
+    if (typeof window === 'undefined') return;
+    window.setTimeout(() => {
+      if (this.notification === message) this.notification = '';
+    }, 4000);
+  }
+
+  get updatable() {
+    return this.catalog.filter((entry) => entry.updateAvailable);
+  }
+
   async refresh() {
     this.loading = true;
     try {
       this.plugins = await invoke<PluginInfo[]>('list_plugins');
       this.error = '';
+      // A plugin removed or stopped elsewhere must not keep an inline frame alive.
+      const active = this.active;
+      if (active && !this.plugins.some((p) => p.id === active.plugin.id && p.running)) {
+        this.active = null;
+      }
     } catch (error) {
       this.error = errorText(error);
     } finally {
@@ -154,23 +105,72 @@ export class PluginManager {
     }
   }
 
+  async refreshCatalog(source?: string) {
+    if (this.catalogLoading) return;
+    this.catalogLoading = true;
+    this.catalogError = '';
+    try {
+      const result = await invoke<CatalogResult>('fetch_plugin_catalog', {
+        source: source ?? null,
+      });
+      this.catalog = result.entries;
+      this.catalogUpdated = result.updated;
+      this.catalogLoaded = true;
+    } catch (error) {
+      this.catalogError = errorText(error);
+    } finally {
+      this.catalogLoading = false;
+    }
+  }
+
+  async installFromCatalog(entry: CatalogEntry) {
+    const target = entry.latest;
+    if (!target || this.isBusy(entry.id) || this.loading) return;
+    this.setBusy(entry.id, true);
+    this.error = '';
+    try {
+      const installed = await invoke<PluginInfo>('install_catalog_plugin', {
+        id: entry.id,
+        version: target.version,
+      });
+      if (this.active?.plugin.id === installed.id) this.active = null;
+      this.notify(
+        t('{name} {version} installed.', { name: installed.name, version: installed.version }),
+      );
+      await this.refresh();
+      // Reconcile installed-versus-available state without a second network round trip
+      // being required before the badge is correct.
+      this.catalog = this.catalog.map((candidate) =>
+        candidate.id === installed.id
+          ? { ...candidate, installedVersion: installed.version, updateAvailable: false }
+          : candidate,
+      );
+    } catch (error) {
+      this.error = errorText(error);
+    } finally {
+      this.setBusy(entry.id, false);
+    }
+  }
+
   async installFromFilePicker() {
+    if (this.loading) return;
     this.loading = true;
     this.error = '';
     try {
-      const archive = new Uint8Array(await invoke<ArrayBuffer>('pick_plugin_archive'));
-      if (archive.byteLength === 0) return;
-      const installed = await installArchive(archive);
+      const installed = await invoke<PluginInfo | null>('install_plugin_from_file');
       if (installed) {
-        this.notification = t('{name} {version} installed.', { name: installed.name, version: installed.version });
-        window.setTimeout(() => (this.notification = ''), 3000);
+        if (this.active?.plugin.id === installed.id) this.active = null;
+        this.notify(
+          t('{name} {version} installed.', { name: installed.name, version: installed.version }),
+        );
       }
-      await this.refresh();
     } catch (error) {
       this.error = errorText(error);
     } finally {
       this.loading = false;
     }
+    await this.refresh();
+    if (this.catalogLoaded) await this.refreshCatalog();
   }
 
   async setEnabled(plugin: PluginInfo, enabled: boolean) {
@@ -179,6 +179,7 @@ export class PluginManager {
     this.error = '';
     try {
       await invoke<void>('set_plugin_enabled', { id: plugin.id, enabled });
+      if (!enabled && this.active?.plugin.id === plugin.id) this.active = null;
       await this.refresh();
     } catch (error) {
       this.error = errorText(error);
@@ -187,7 +188,27 @@ export class PluginManager {
     }
   }
 
+  /** Start the plugin and host it inline; the URL is host-owned runtime state. */
   async open(plugin: PluginInfo) {
+    if (this.isBusy(plugin.id) || this.loading || !plugin.enabled) return;
+    this.setBusy(plugin.id, true);
+    this.opening = plugin.id;
+    this.error = '';
+    try {
+      const url = await invoke<string>('start_plugin', { id: plugin.id });
+      this.active = { plugin, url };
+      await this.refresh();
+    } catch (error) {
+      this.active = null;
+      this.error = errorText(error);
+    } finally {
+      this.opening = '';
+      this.setBusy(plugin.id, false);
+    }
+  }
+
+  /** Secondary action: the same running runtime in its own OS window. */
+  async openWindow(plugin: PluginInfo) {
     if (this.isBusy(plugin.id) || this.loading || !plugin.enabled) return;
     this.setBusy(plugin.id, true);
     this.error = '';
@@ -201,11 +222,16 @@ export class PluginManager {
     }
   }
 
+  closeActive() {
+    this.active = null;
+  }
+
   async stop(plugin: PluginInfo) {
     if (this.isBusy(plugin.id) || this.loading) return;
     this.setBusy(plugin.id, true);
     this.error = '';
     try {
+      if (this.active?.plugin.id === plugin.id) this.active = null;
       await invoke<void>('stop_plugin', { id: plugin.id });
       await this.refresh();
     } catch (error) {
@@ -217,13 +243,26 @@ export class PluginManager {
 
   async remove(plugin: PluginInfo) {
     if (this.isBusy(plugin.id) || this.loading) return;
-    const confirmed = window.confirm(t('Remove {name}? This stops the plugin and deletes its installed code. Persistent plugin data is kept.', { name: plugin.name }));
+    const confirmed = window.confirm(
+      t(
+        'Remove {name}? This stops the plugin and deletes its installed code. Persistent plugin data is kept.',
+        {
+          name: plugin.name,
+        },
+      ),
+    );
     if (!confirmed) return;
     this.setBusy(plugin.id, true);
     this.error = '';
     try {
+      if (this.active?.plugin.id === plugin.id) this.active = null;
       await invoke<void>('remove_plugin', { id: plugin.id });
       await this.refresh();
+      this.catalog = this.catalog.map((candidate) =>
+        candidate.id === plugin.id
+          ? { ...candidate, installedVersion: null, updateAvailable: false }
+          : candidate,
+      );
     } catch (error) {
       this.error = errorText(error);
     } finally {
